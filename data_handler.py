@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-data_handler.py - Module for logging acceleration data to CSV files.
+data_handler.py - Module for logging MPU6050 sensor data to CSV files.
 
-This module provides functions for recording sensor readings to CSV files
-with appropriate error handling and file management.
+This module provides functions for recording accelerometer, gyroscope,
+and temperature readings to CSV files with appropriate error handling.
 """
 
 import csv
@@ -11,14 +11,18 @@ import os
 from datetime import datetime
 
 
-def log_acceleration_to_csv(x, y, z, timestamp=None, filename='sensor_data.csv'):
+def log_sensor_data_to_csv(accel_x, accel_y, accel_z, 
+                          gyro_x, gyro_y, gyro_z,
+                          temperature,
+                          timestamp=None, 
+                          filename='sensor_data.csv'):
     """
-    Log acceleration data to a CSV file.
+    Log MPU6050 sensor data to a CSV file.
     
     Args:
-        x (float): X-axis acceleration in m/s².
-        y (float): Y-axis acceleration in m/s².
-        z (float): Z-axis acceleration in m/s².
+        accel_x, accel_y, accel_z (float): Acceleration values in m/s².
+        gyro_x, gyro_y, gyro_z (float): Gyroscope values in rad/s.
+        temperature (float): Temperature in degrees Celsius.
         timestamp: Timestamp for the reading. If None, current time is used.
                   Can be a datetime object or string.
         filename (str): Path to the CSV file. Default is 'sensor_data.csv'.
@@ -31,7 +35,10 @@ def log_acceleration_to_csv(x, y, z, timestamp=None, filename='sensor_data.csv')
         timestamp = datetime.now().isoformat()
     
     # Prepare data row
-    data_row = [timestamp, x, y, z]
+    data_row = [timestamp, 
+                accel_x, accel_y, accel_z,
+                gyro_x, gyro_y, gyro_z,
+                temperature]
     
     try:
         # Check if file exists to determine if header is needed
@@ -43,7 +50,10 @@ def log_acceleration_to_csv(x, y, z, timestamp=None, filename='sensor_data.csv')
             
             # Write header if file is being created
             if not file_exists:
-                csv_writer.writerow(['timestamp', 'x', 'y', 'z'])
+                csv_writer.writerow(['timestamp', 
+                                   'accel_x', 'accel_y', 'accel_z',
+                                   'gyro_x', 'gyro_y', 'gyro_z',
+                                   'temperature'])
             
             # Write data row
             csv_writer.writerow(data_row)
@@ -60,7 +70,7 @@ def log_acceleration_to_csv(x, y, z, timestamp=None, filename='sensor_data.csv')
 
 def get_latest_readings(filename='sensor_data.csv', num_readings=1):
     """
-    Retrieve the most recent acceleration readings from the CSV file.
+    Retrieve the most recent sensor readings from the CSV file.
     
     Args:
         filename (str): Path to the CSV file. Default is 'sensor_data.csv'.
@@ -88,12 +98,20 @@ def get_latest_readings(filename='sensor_data.csv', num_readings=1):
             # Convert rows to dictionaries
             result = []
             for row in recent_rows:
-                if len(row) >= 4:  # Ensure row has enough columns
+                if len(row) >= 8:  # Ensure row has enough columns
                     result.append({
                         'timestamp': row[0],
-                        'x': float(row[1]),
-                        'y': float(row[2]),
-                        'z': float(row[3])
+                        'acceleration': {
+                            'x': float(row[1]),
+                            'y': float(row[2]),
+                            'z': float(row[3])
+                        },
+                        'gyro': {
+                            'x': float(row[4]),
+                            'y': float(row[5]),
+                            'z': float(row[6])
+                        },
+                        'temperature': float(row[7])
                     })
             
             return result
@@ -108,9 +126,16 @@ def get_latest_readings(filename='sensor_data.csv', num_readings=1):
 
 # Example usage
 if __name__ == "__main__":
-    # Example of logging current acceleration data
-    x, y, z = 0.1, 0.2, 0.9  # Example acceleration values
-    success = log_acceleration_to_csv(x, y, z)
+    # Example of logging current sensor data
+    accel = (0.1, 0.2, 0.9)  # Example acceleration values
+    gyro = (0.01, 0.02, 0.03)  # Example gyroscope values
+    temp = 25.5  # Example temperature value
+    
+    success = log_sensor_data_to_csv(
+        accel[0], accel[1], accel[2],
+        gyro[0], gyro[1], gyro[2],
+        temp
+    )
     
     if success:
         print(f"Data logged successfully to sensor_data.csv")

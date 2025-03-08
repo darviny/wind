@@ -1,22 +1,39 @@
 #!/usr/bin/env python3
 """
-anomaly_detector.py - Module for detecting anomalies in sensor data.
+anomaly_detector.py - Module for detecting anomalies in MPU6050 sensor data.
 
 This module provides functionality to check if sensor data features exceed
-predefined thresholds, which may indicate anomalous behavior.
+predefined thresholds for accelerometer, gyroscope, and temperature readings.
 """
 
-# Default thresholds for common acceleration features
+# Default thresholds for sensor features
 DEFAULT_THRESHOLDS = {
-    "x_mean": 0.5,    # Mean acceleration in X-axis (m/s²)
-    "y_mean": 0.5,    # Mean acceleration in Y-axis (m/s²)
-    "z_mean": 9.9,    # Mean acceleration in Z-axis (m/s²) - ~9.8 is gravity
-    "x_std": 0.1,     # Standard deviation of X acceleration (m/s²)
-    "y_std": 0.1,     # Standard deviation of Y acceleration (m/s²)
-    "z_std": 0.1,     # Standard deviation of Z acceleration (m/s²)
-    "x_max": 1.0,     # Maximum X acceleration (m/s²)
-    "y_max": 1.0,     # Maximum Y acceleration (m/s²)
-    "z_max": 10.5,    # Maximum Z acceleration (m/s²)
+    # Accelerometer thresholds (m/s²)
+    "accel_x_mean": 0.5,
+    "accel_y_mean": 0.5,
+    "accel_z_mean": 9.9,    # ~9.8 is gravity
+    "accel_x_std": 0.1,
+    "accel_y_std": 0.1,
+    "accel_z_std": 0.1,
+    "accel_x_max": 1.0,
+    "accel_y_max": 1.0,
+    "accel_z_max": 10.5,
+    
+    # Gyroscope thresholds (rad/s)
+    "gyro_x_mean": 0.1,
+    "gyro_y_mean": 0.1,
+    "gyro_z_mean": 0.1,
+    "gyro_x_std": 0.05,
+    "gyro_y_std": 0.05,
+    "gyro_z_std": 0.05,
+    "gyro_x_max": 0.5,
+    "gyro_y_max": 0.5,
+    "gyro_z_max": 0.5,
+    
+    # Temperature thresholds (°C)
+    "temp_mean": 50,    # Maximum average temperature
+    "temp_std": 2,      # Maximum temperature variation
+    "temp_max": 85      # Maximum absolute temperature
 }
 
 
@@ -26,24 +43,14 @@ def check_anomaly(features, thresholds=None):
     
     Args:
         features (dict): Dictionary of feature names and their values.
-            Example: {"x_mean": 0.01, "y_std": 0.005, "z_max": 10.2}
+            Example: {"accel_x_mean": 0.01, "gyro_y_std": 0.005, "temp_mean": 25}
         thresholds (dict, optional): Dictionary of feature names and their threshold values.
-            If None, DEFAULT_THRESHOLDS will be used. If a feature in 'features'
-            doesn't have a corresponding threshold, it will be ignored.
+            If None, DEFAULT_THRESHOLDS will be used.
     
     Returns:
         tuple: (is_anomaly, exceeded_features)
-            - is_anomaly (bool): True if any feature exceeds its threshold, False otherwise.
-            - exceeded_features (dict): Dictionary of features that exceeded their thresholds,
-              with the feature name as key and a tuple of (value, threshold) as value.
-    
-    Example:
-        >>> features = {"x_std": 0.2, "y_std": 0.05, "z_std": 0.08}
-        >>> is_anomaly, exceeded = check_anomaly(features)
-        >>> print(f"Anomaly detected: {is_anomaly}")
-        >>> if is_anomaly:
-        ...     for feature, (value, threshold) in exceeded.items():
-        ...         print(f"{feature}: {value} exceeds threshold {threshold}")
+            - is_anomaly (bool): True if any feature exceeds its threshold
+            - exceeded_features (dict): Features that exceeded their thresholds
     """
     # Use default thresholds if none provided
     if thresholds is None:
@@ -74,36 +81,75 @@ def analyze_readings(readings):
     Calculate statistical features from a list of sensor readings.
     
     Args:
-        readings (list): List of dictionaries, each containing 'x', 'y', 'z' values.
-            Example: [{'x': 0.1, 'y': 0.2, 'z': 9.8}, {'x': 0.15, 'y': 0.22, 'z': 9.82}]
+        readings (list): List of dictionaries containing sensor readings.
+            Example: [
+                {
+                    'acceleration': {'x': 0.1, 'y': 0.2, 'z': 9.8},
+                    'gyro': {'x': 0.01, 'y': 0.02, 'z': 0.01},
+                    'temperature': 25.0
+                },
+                ...
+            ]
     
     Returns:
         dict: Dictionary of calculated features.
     """
     import statistics
     
-    # Initialize empty lists for each axis
-    x_values = []
-    y_values = []
-    z_values = []
+    # Initialize empty lists for each measurement
+    accel_x, accel_y, accel_z = [], [], []
+    gyro_x, gyro_y, gyro_z = [], [], []
+    temperatures = []
     
     # Extract values from readings
     for reading in readings:
-        x_values.append(reading['x'])
-        y_values.append(reading['y'])
-        z_values.append(reading['z'])
+        # Acceleration values
+        accel = reading['acceleration']
+        accel_x.append(accel['x'])
+        accel_y.append(accel['y'])
+        accel_z.append(accel['z'])
+        
+        # Gyroscope values
+        gyro = reading['gyro']
+        gyro_x.append(gyro['x'])
+        gyro_y.append(gyro['y'])
+        gyro_z.append(gyro['z'])
+        
+        # Temperature values
+        temperatures.append(reading['temperature'])
+    
+    # Helper function for standard deviation
+    def safe_stdev(values):
+        return statistics.stdev(values) if len(values) > 1 else 0
     
     # Calculate features
     features = {
-        "x_mean": statistics.mean(x_values),
-        "y_mean": statistics.mean(y_values),
-        "z_mean": statistics.mean(z_values),
-        "x_std": statistics.stdev(x_values) if len(x_values) > 1 else 0,
-        "y_std": statistics.stdev(y_values) if len(y_values) > 1 else 0,
-        "z_std": statistics.stdev(z_values) if len(z_values) > 1 else 0,
-        "x_max": max(x_values),
-        "y_max": max(y_values),
-        "z_max": max(z_values)
+        # Accelerometer features
+        "accel_x_mean": statistics.mean(accel_x),
+        "accel_y_mean": statistics.mean(accel_y),
+        "accel_z_mean": statistics.mean(accel_z),
+        "accel_x_std": safe_stdev(accel_x),
+        "accel_y_std": safe_stdev(accel_y),
+        "accel_z_std": safe_stdev(accel_z),
+        "accel_x_max": max(accel_x),
+        "accel_y_max": max(accel_y),
+        "accel_z_max": max(accel_z),
+        
+        # Gyroscope features
+        "gyro_x_mean": statistics.mean(gyro_x),
+        "gyro_y_mean": statistics.mean(gyro_y),
+        "gyro_z_mean": statistics.mean(gyro_z),
+        "gyro_x_std": safe_stdev(gyro_x),
+        "gyro_y_std": safe_stdev(gyro_y),
+        "gyro_z_std": safe_stdev(gyro_z),
+        "gyro_x_max": max(gyro_x),
+        "gyro_y_max": max(gyro_y),
+        "gyro_z_max": max(gyro_z),
+        
+        # Temperature features
+        "temp_mean": statistics.mean(temperatures),
+        "temp_std": safe_stdev(temperatures),
+        "temp_max": max(temperatures)
     }
     
     return features
@@ -111,13 +157,18 @@ def analyze_readings(readings):
 
 # Example usage
 if __name__ == "__main__":
-    # Example sensor readings (x, y, z accelerations)
+    # Example sensor readings
     sample_readings = [
-        {'x': 0.01, 'y': 0.02, 'z': 9.81},
-        {'x': 0.02, 'y': 0.03, 'z': 9.82},
-        {'x': 0.15, 'y': 0.05, 'z': 9.80},
-        {'x': 0.25, 'y': 0.02, 'z': 9.83},
-        {'x': 0.01, 'y': 0.01, 'z': 9.79}
+        {
+            'acceleration': {'x': 0.01, 'y': 0.02, 'z': 9.81},
+            'gyro': {'x': 0.01, 'y': 0.02, 'z': 0.01},
+            'temperature': 25.0
+        },
+        {
+            'acceleration': {'x': 0.02, 'y': 0.03, 'z': 9.82},
+            'gyro': {'x': 0.02, 'y': 0.01, 'z': 0.02},
+            'temperature': 25.1
+        }
     ]
     
     # Calculate features from the readings
@@ -132,18 +183,5 @@ if __name__ == "__main__":
     print(f"\nAnomaly detected: {is_anomaly}")
     if is_anomaly:
         print("Exceeded thresholds:")
-        for feature, (value, threshold) in exceeded.items():
-            print(f"  {feature}: {value:.4f} exceeds threshold {threshold}")
-    
-    # Example with custom thresholds
-    custom_thresholds = {
-        "x_std": 0.05,
-        "y_std": 0.05,
-        "z_std": 0.05
-    }
-    print("\nChecking with custom thresholds:")
-    is_anomaly, exceeded = check_anomaly(features, custom_thresholds)
-    print(f"Anomaly detected: {is_anomaly}")
-    if is_anomaly:
         for feature, (value, threshold) in exceeded.items():
             print(f"  {feature}: {value:.4f} exceeds threshold {threshold}")

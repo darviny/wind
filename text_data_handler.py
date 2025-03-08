@@ -2,16 +2,16 @@
 """
 test_data_handler.py - Test script for sensor_reader.py and data_handler.py.
 
-This script continuously reads acceleration data from an ADXL345 sensor
-and logs it to a CSV file at 5 Hz (every 0.2 seconds).
+This script continuously reads accelerometer, gyroscope, and temperature data 
+from an MPU6050 sensor and logs it to a CSV file at 5 Hz (every 0.2 seconds).
 """
 
 import time
 import signal
 import sys
 from datetime import datetime
-from sensor_reader import ADXL345Reader
-from data_handler import log_acceleration_to_csv
+from sensor_reader import MPU6050Reader
+from data_handler import log_sensor_data_to_csv
 
 # Global flag for clean exit
 running = True
@@ -29,9 +29,9 @@ def main():
     sensor = None
     
     try:
-        # Initialize the ADXL345 sensor
-        print("Initializing ADXL345 sensor...")
-        sensor = ADXL345Reader()
+        # Initialize the MPU6050 sensor
+        print("Initializing MPU6050 sensor...")
+        sensor = MPU6050Reader()
         print("Sensor initialized successfully")
         
         print("Starting data logging at 5 Hz. Press Ctrl+C to exit.")
@@ -41,12 +41,21 @@ def main():
             # Get current timestamp
             timestamp = datetime.now().isoformat()
             
-            # Read acceleration data
-            x, y, z = sensor.get_acceleration()
+            # Read sensor data
+            accel = sensor.get_acceleration()
+            gyro = sensor.get_gyro()
+            temp = sensor.get_temperature()
             
             # Log data to CSV
-            if log_acceleration_to_csv(x, y, z, timestamp):
-                print(f"Logged: x={x:.3f}, y={y:.3f}, z={z:.3f}")
+            if log_sensor_data_to_csv(
+                accel[0], accel[1], accel[2],  # acceleration x, y, z
+                gyro[0], gyro[1], gyro[2],     # gyroscope x, y, z
+                temp,                           # temperature
+                timestamp
+            ):
+                print(f"Logged: Accel(x={accel[0]:.2f}, y={accel[1]:.2f}, z={accel[2]:.2f}), "
+                      f"Gyro(x={gyro[0]:.2f}, y={gyro[1]:.2f}, z={gyro[2]:.2f}), "
+                      f"Temp={temp:.1f}°C")
             else:
                 print("Failed to log data")
             
