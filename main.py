@@ -57,27 +57,31 @@ def main():
         while running:
             try:
                 # Read all sensor data
-                accel = sensor.acceleration
-                gyro = sensor.gyro
-                temp = sensor.temperature
+                accel = sensor.acceleration  # This returns a tuple (x, y, z)
+                gyro = sensor.gyro          # This returns a tuple (x, y, z)
+                temp = sensor.temperature   # This returns a single value
                 timestamp = datetime.now()
                 
-                # Log raw data to CSV
+                # Unpack the tuples before logging
+                accel_x, accel_y, accel_z = accel  # Unpack acceleration tuple
+                gyro_x, gyro_y, gyro_z = gyro      # Unpack gyroscope tuple
+                
+                # Log raw data to CSV with unpacked values
                 success = log_sensor_data_to_csv(
-                    accel[0], accel[1], accel[2],  # acceleration
-                    gyro[0], gyro[1], gyro[2],     # gyroscope
-                    temp,                           # temperature
+                    accel_x, accel_y, accel_z,     # Unpacked acceleration values
+                    gyro_x, gyro_y, gyro_z,        # Unpacked gyroscope values
+                    temp,                           # Temperature (already a single value)
                     timestamp.isoformat()
                 )
                 
                 if success:
-                    # Print the current readings
-                    print(f"\rAccel: ({accel[0]:.2f}, {accel[1]:.2f}, {accel[2]:.2f}) m/s² | "
-                          f"Gyro: ({gyro[0]:.2f}, {gyro[1]:.2f}, {gyro[2]:.2f}) rad/s | "
+                    # Print the current readings using unpacked values
+                    print(f"\rAccel: ({accel_x:.2f}, {accel_y:.2f}, {accel_z:.2f}) m/s² | "
+                          f"Gyro: ({gyro_x:.2f}, {gyro_y:.2f}, {gyro_z:.2f}) rad/s | "
                           f"Temp: {temp:.1f}°C", end='')
                 
-                # Add data to the processing buffer
-                window_processed = buffer.add_reading(accel, gyro, temp, timestamp)
+                # Add data to the processing buffer (also use unpacked values)
+                window_processed = buffer.add_reading(accel_x, accel_y, accel_z, timestamp)
                 
                 if window_processed:
                     print("\nProcessed 1-second window of data")
