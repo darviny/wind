@@ -66,8 +66,16 @@ def run_monitoring(sample_rate=20, window_size=1.0, use_svm=False):
     try:
         # Initialize the ADXL345 sensor
         print("Initializing ADXL345 sensor...")
-        sensor = ADXL345Reader()
-        print("Sensor initialized successfully")
+        try:
+            sensor = ADXL345Reader()
+            print("Sensor initialized successfully")
+        except Exception as e:
+            print(f"Failed to initialize sensor: {e}")
+            print("Please check:")
+            print("1. Sensor connections (SDA, SCL, VCC, GND)")
+            print("2. I2C is enabled (sudo raspi-config)")
+            print("3. I2C permissions (sudo usermod -aG i2c $USER)")
+            return 1
         
         # Initialize the data buffer
         acceleration_buffer = AccelerationBuffer(
@@ -186,4 +194,4 @@ if __name__ == "__main__":
         sample_rate=args.rate, 
         window_size=args.window, 
         use_svm=args.svm
-    )),
+    ))
