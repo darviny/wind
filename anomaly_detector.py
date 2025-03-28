@@ -10,7 +10,7 @@ predefined thresholds for accelerometer, gyroscope, and temperature readings.
 DEFAULT_THRESHOLDS = {
     # Accelerometer thresholds (m/s²)
     "accel_x_mean": 9.9,    # Allow for gravity on any axis
-    "accel_y_mean": 9.9,    # Allow for gravity on any axis
+    "accel_y_mean": 10.9,    # Allow for gravity on any axis
     "accel_z_mean": 9.9,    # Allow for gravity on any axis
     "accel_x_std": 0.5,     # Increased to detect significant shaking
     "accel_y_std": 0.5,     # Increased to detect significant shaking
