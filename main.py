@@ -81,9 +81,16 @@ def main():
                           f"Temp: {temp:.1f}°C", end='')
                 
                 # Add data to the processing buffer (also use unpacked values)
-                window_processed = buffer.add_reading(accel_x, accel_y, accel_z, timestamp)
+                window_processed = buffer.add_reading(
+                    (accel_x, accel_y, accel_z),  # acceleration tuple
+                    (gyro_x, gyro_y, gyro_z),     # gyroscope tuple
+                    temp,                          # temperature
+                    timestamp
+                )
                 
                 if window_processed:
+                    # The anomaly message will be printed automatically by _process_window
+                    # if an anomaly is detected
                     print("\nProcessed 1-second window of data")
                 
                 # Wait for next sample (5 Hz = 0.2 seconds)
