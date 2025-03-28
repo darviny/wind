@@ -9,14 +9,14 @@ predefined thresholds for accelerometer, gyroscope, and temperature readings.
 # Default thresholds for sensor features
 DEFAULT_THRESHOLDS = {
     # Accelerometer thresholds (m/s²)
-    "accel_x_mean": 0.5,
-    "accel_y_mean": 0.5,
+    "accel_x_mean": 0.3,    # Reduced from 0.5
+    "accel_y_mean": 0.3,    # Reduced from 0.5
     "accel_z_mean": 9.9,    # ~9.8 is gravity
-    "accel_x_std": 0.1,
-    "accel_y_std": 0.1,
-    "accel_z_std": 0.1,
-    "accel_x_max": 1.0,
-    "accel_y_max": 1.0,
+    "accel_x_std": 0.05,    # Reduced from 0.1
+    "accel_y_std": 0.05,    # Reduced from 0.1
+    "accel_z_std": 0.05,    # Reduced from 0.1
+    "accel_x_max": 0.5,     # Reduced from 1.0
+    "accel_y_max": 0.5,     # Reduced from 1.0
     "accel_z_max": 10.5,
     
     # Gyroscope thresholds (rad/s)

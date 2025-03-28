@@ -325,14 +325,17 @@ class AccelerationBuffer:
         Returns:
             dict: Dictionary of computed features.
         """
-        # Compute mean and standard deviation for each axis
         features = {
-            "x_mean": statistics.mean(self.x_values),
-            "y_mean": statistics.mean(self.y_values),
-            "z_mean": statistics.mean(self.z_values),
-            "x_std": statistics.stdev(self.x_values) if len(self.x_values) > 1 else 0,
-            "y_std": statistics.stdev(self.y_values) if len(self.y_values) > 1 else 0,
-            "z_std": statistics.stdev(self.z_values) if len(self.z_values) > 1 else 0
+            # Accelerometer features
+            "accel_x_mean": statistics.mean(self.x_values),
+            "accel_y_mean": statistics.mean(self.y_values),
+            "accel_z_mean": statistics.mean(self.z_values),
+            "accel_x_std": statistics.stdev(self.x_values) if len(self.x_values) > 1 else 0,
+            "accel_y_std": statistics.stdev(self.y_values) if len(self.y_values) > 1 else 0,
+            "accel_z_std": statistics.stdev(self.z_values) if len(self.z_values) > 1 else 0,
+            "accel_x_max": max(self.x_values),
+            "accel_y_max": max(self.y_values),
+            "accel_z_max": max(self.z_values)
         }
         return features
     
