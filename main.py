@@ -17,7 +17,7 @@ import sys
 import board
 import adafruit_mpu6050
 from datetime import datetime
-from data_handler import MPU6050Buffer, log_sensor_data_to_csv
+from data_handler import AccelerationBuffer, log_sensor_data_to_csv
 
 # Import anomaly detection
 from anomaly_detector import DEFAULT_THRESHOLDS, check_anomaly
@@ -49,7 +49,7 @@ def main():
         print("Sensor initialized successfully")
         
         # Create data buffer for 1-second windows
-        buffer = MPU6050Buffer(window_size=1.0, expected_sample_rate=5)
+        buffer = AccelerationBuffer(window_size=1.0, expected_sample_rate=5)
         
         print("Starting data collection at 5 Hz. Press Ctrl+C to exit.")
         
