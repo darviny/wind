@@ -80,11 +80,9 @@ def main():
                           f"Gyro: ({gyro_x:.2f}, {gyro_y:.2f}, {gyro_z:.2f}) rad/s | "
                           f"Temp: {temp:.1f}°C", end='')
                 
-                # Add data to the processing buffer (also use unpacked values)
+                # Add data to the processing buffer (use individual values, not tuples)
                 window_processed = buffer.add_reading(
-                    (accel_x, accel_y, accel_z),  # acceleration tuple
-                    (gyro_x, gyro_y, gyro_z),     # gyroscope tuple
-                    temp,                          # temperature
+                    accel_x, accel_y, accel_z,  # individual acceleration values
                     timestamp
                 )
                 
