@@ -6,7 +6,7 @@ This script integrates all components of the monitoring system:
 - Sensor reading from MPU6050 accelerometer
 - Data buffering and feature calculation
 - Anomaly detection
-- Alerting
+- LCD Alerting
 
 It can be run directly or integrated into a systemd service.
 """
@@ -18,12 +18,10 @@ import board
 import adafruit_mpu6050
 from datetime import datetime
 from data_handler import AccelerationBuffer, log_sensor_data_to_csv
+from lcd_alert import LCDAlert
 
 # Import anomaly detection
 from anomaly_detector import DEFAULT_THRESHOLDS, check_anomaly
-
-# Import alerting
-from alert import send_alert, log_alert
 
 # Global flag for clean exit
 running = True
@@ -40,68 +38,97 @@ signal.signal(signal.SIGINT, signal_handler)
 def main():
     sensor = None
     buffer = None
+    lcd = None
     
     try:
+        # Initialize LCD
+        print("Initializing LCD...")
+        try:
+            lcd = LCDAlert()
+            lcd.display_alert("Starting up...")
+        except Exception as e:
+            print(f"Warning: LCD initialization failed: {e}")
+            lcd = None
+
         # Initialize I2C and MPU6050 sensor
         print("Initializing MPU6050 sensor...")
         i2c = board.I2C()  # uses board.SCL and board.SDA
         sensor = adafruit_mpu6050.MPU6050(i2c)
         print("Sensor initialized successfully")
+        if lcd:
+            lcd.display_alert("Sensor Ready", duration=1)
         
         # Create data buffer for 1-second windows
         buffer = AccelerationBuffer(window_size=1.0, expected_sample_rate=5)
         
         print("Starting data collection at 5 Hz. Press Ctrl+C to exit.")
+        if lcd:
+            lcd.display_alert("Monitoring...")
         
         # Main data collection loop - runs until Ctrl+C is pressed
         while running:
             try:
                 # Read all sensor data
-                accel = sensor.acceleration  # This returns a tuple (x, y, z)
-                gyro = sensor.gyro          # This returns a tuple (x, y, z)
-                temp = sensor.temperature   # This returns a single value
+                accel = sensor.acceleration
+                gyro = sensor.gyro
+                temp = sensor.temperature
                 timestamp = datetime.now()
                 
                 # Unpack the tuples before logging
-                accel_x, accel_y, accel_z = accel  # Unpack acceleration tuple
-                gyro_x, gyro_y, gyro_z = gyro      # Unpack gyroscope tuple
+                accel_x, accel_y, accel_z = accel
+                gyro_x, gyro_y, gyro_z = gyro
                 
                 # Log raw data to CSV with unpacked values
                 success = log_sensor_data_to_csv(
-                    accel_x, accel_y, accel_z,     # Unpacked acceleration values
-                    gyro_x, gyro_y, gyro_z,        # Unpacked gyroscope values
-                    temp,                           # Temperature (already a single value)
+                    accel_x, accel_y, accel_z,
+                    gyro_x, gyro_y, gyro_z,
+                    temp,
                     timestamp.isoformat()
                 )
                 
-                if success:
-                    # Print the current readings using unpacked values
-                    print(f"Accel: ({accel_x:.2f}, {accel_y:.2f}, {accel_z:.2f}) m/s² | "
-                          f"Gyro: ({gyro_x:.2f}, {gyro_y:.2f}, {gyro_z:.2f}) rad/s | "
-                          f"Temp: {temp:.1f}°C")
+                if success and lcd:
+                    # Update LCD with current readings
+                    lcd.lcd.clear()
+                    lcd.lcd.cursor_pos = (0, 0)
+                    lcd.lcd.write_string(f"X:{accel_x:.1f} Y:{accel_y:.1f}")
+                    lcd.lcd.cursor_pos = (1, 0)
+                    lcd.lcd.write_string(f"Z:{accel_z:.1f}")
                 
-                # Add data to the processing buffer (use individual values, not tuples)
+                # Add data to the processing buffer
                 window_processed = buffer.add_reading(
-                    accel_x, accel_y, accel_z,  # individual acceleration values
+                    accel_x, accel_y, accel_z,
                     timestamp
                 )
                 
                 if window_processed:
-                    # The anomaly message will be printed automatically by _process_window
-                    # if an anomaly is detected
-                    print("\nProcessed 1-second window of data")
+                    # Get features and check for anomalies
+                    features = buffer._compute_features()
+                    is_anomaly, exceeded = check_anomaly(features, DEFAULT_THRESHOLDS)
+                    
+                    if is_anomaly:
+                        print("\nANOMALY DETECTED!")
+                        if lcd:
+                            lcd.display_alert("ANOMALY DETECTED!", duration=1)
+                    else:
+                        print("\nProcessed 1-second window of data")
                 
                 # Wait for next sample (5 Hz = 0.2 seconds)
                 time.sleep(0.2)
                 
             except Exception as e:
                 print(f"\nError reading sensor: {e}")
-                time.sleep(0.2)  # Wait before retry
+                if lcd:
+                    lcd.display_alert(f"Error: {str(e)[:16]}")
+                time.sleep(0.2)
     
     except KeyboardInterrupt:
         print("\nData collection interrupted by user")
+        if lcd:
+            lcd.display_alert("Stopping...", duration=1)
     except Exception as e:
         print(f"Error: {e}")
+        if lcd:
+            lcd.display_alert("Error! Check log")
         print("Please check:")
         print("1. Sensor connections (SDA, SCL, VCC, GND)")
         print("2. I2C is enabled (sudo raspi-config)")
@@ -112,6 +139,8 @@ def main():
         if buffer:
             print("Processing remaining data...")
             buffer.process_remaining_data()
+        if lcd:
+            lcd.clear()
     
     print("Data collection complete.")
     return 0
