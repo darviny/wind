@@ -66,6 +66,61 @@ def log_acceleration_to_csv(x, y, z, timestamp=None, filename='sensor_data.csv')
         return False
 
 
+def log_sensor_data_to_csv(accel_x, accel_y, accel_z, 
+                          gyro_x, gyro_y, gyro_z,
+                          temperature,
+                          timestamp=None, 
+                          filename='sensor_data.csv'):
+    """
+    Log MPU6050 sensor data to a CSV file.
+    
+    Args:
+        accel_x, accel_y, accel_z (float): Acceleration values in m/s².
+        gyro_x, gyro_y, gyro_z (float): Gyroscope values in rad/s.
+        temperature (float): Temperature in degrees Celsius.
+        timestamp: Timestamp for the reading. If None, current time is used.
+        filename (str): Path to the CSV file.
+    
+    Returns:
+        bool: True if logging was successful, False otherwise.
+    """
+    if timestamp is None:
+        timestamp = datetime.now().isoformat()
+    
+    # Prepare data row
+    data_row = [timestamp, 
+                accel_x, accel_y, accel_z,
+                gyro_x, gyro_y, gyro_z,
+                temperature]
+    
+    try:
+        # Check if file exists to determine if header is needed
+        file_exists = os.path.isfile(filename)
+        
+        # Open file in append mode
+        with open(filename, 'a', newline='') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            
+            # Write header if file is being created
+            if not file_exists:
+                csv_writer.writerow(['timestamp', 
+                                   'accel_x', 'accel_y', 'accel_z',
+                                   'gyro_x', 'gyro_y', 'gyro_z',
+                                   'temperature'])
+            
+            # Write data row
+            csv_writer.writerow(data_row)
+        
+        return True
+    
+    except IOError as e:
+        print(f"Warning: Could not write to CSV file '{filename}': {e}")
+        return False
+    except Exception as e:
+        print(f"Warning: An unexpected error occurred while writing to CSV: {e}")
+        return False
+
+
 def log_features_to_csv(features, is_anomaly, timestamp=None, filename='features_data.csv'):
     """
     Log calculated features and anomaly detection results to a CSV file.
