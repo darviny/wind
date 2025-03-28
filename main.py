@@ -76,9 +76,9 @@ def main():
                 
                 if success:
                     # Print the current readings using unpacked values
-                    print(f"\rAccel: ({accel_x:.2f}, {accel_y:.2f}, {accel_z:.2f}) m/s² | "
+                    print(f"Accel: ({accel_x:.2f}, {accel_y:.2f}, {accel_z:.2f}) m/s² | "
                           f"Gyro: ({gyro_x:.2f}, {gyro_y:.2f}, {gyro_z:.2f}) rad/s | "
-                          f"Temp: {temp:.1f}°C", end='')
+                          f"Temp: {temp:.1f}°C")
                 
                 # Add data to the processing buffer (use individual values, not tuples)
                 window_processed = buffer.add_reading(
