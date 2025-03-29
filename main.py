@@ -22,7 +22,7 @@ from lcd_alert import LCDAlert
 from sms_alert import send_sms_alert, set_cooldown_period
 
 # Import anomaly detection
-from anomaly_detector import DEFAULT_THRESHOLDS, check_anomaly, OneClassSVMDetector
+from anomaly_detector import OneClassSVMDetector
 
 # Global flag for clean exit
 running = True
