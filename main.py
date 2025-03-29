@@ -22,7 +22,7 @@ from lcd_alert import LCDAlert
 from sms_alert import send_sms_alert, set_cooldown_period
 
 # Import anomaly detection
-from anomaly_detector import DEFAULT_THRESHOLDS, check_anomaly
+from anomaly_detector import DEFAULT_THRESHOLDS, check_anomaly, OneClassSVMDetector
 
 # Global flag for clean exit
 running = True
@@ -69,6 +69,13 @@ def main():
         # Optionally adjust the cooldown period (default is 5 seconds)
         set_cooldown_period(5)  # 5 seconds between alerts
         
+        # Initialize detector
+        detector = OneClassSVMDetector()
+
+        # If using fallback, you can customize thresholds
+        if detector.using_fallback:
+            detector.set_fallback_thresholds(acc_threshold=2.5, gyro_threshold=150.0)
+        
         # Main data collection loop - runs until Ctrl+C is pressed
         while running:
             try:
@@ -107,10 +114,10 @@ def main():
                 if window_processed:
                     # Get features and check for anomalies
                     features = buffer._compute_features()
-                    is_anomaly, exceeded = check_anomaly(features, DEFAULT_THRESHOLDS)
+                    is_anomaly, score = detector.predict(features)
                     
                     if is_anomaly:
-                        print("\nANOMALY DETECTED!")
+                        print(f"Anomaly detected with score: {score:.3f}")
                         if lcd: 
                             lcd.display_alert("ANOMALY DETECTED!", duration=1)
                             send_sms_alert(
