@@ -19,6 +19,7 @@ import adafruit_mpu6050
 from datetime import datetime
 from data_handler import AccelerationBuffer, log_sensor_data_to_csv
 from lcd_alert import LCDAlert
+from sms_alert import send_sms_alert
 
 # Import anomaly detection
 from anomaly_detector import DEFAULT_THRESHOLDS, check_anomaly
@@ -107,8 +108,9 @@ def main():
                     
                     if is_anomaly:
                         print("\nANOMALY DETECTED!")
-                        if lcd:
+                        if lcd: 
                             lcd.display_alert("ANOMALY DETECTED!", duration=1)
+                            send_sms_alert("+17782383531", "Anomaly detected!")
                     else:
                         print("\nProcessed 1-second window of data")
                 
