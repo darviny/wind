@@ -19,7 +19,7 @@ import adafruit_mpu6050
 from datetime import datetime
 from data_handler import AccelerationBuffer, log_sensor_data_to_csv
 from lcd_alert import LCDAlert
-from sms_alert import send_sms_alert
+from sms_alert import send_sms_alert, set_cooldown_period
 
 # Import anomaly detection
 from anomaly_detector import DEFAULT_THRESHOLDS, check_anomaly
@@ -66,6 +66,9 @@ def main():
         if lcd:
             lcd.display_alert("Monitoring...")
         
+        # Optionally adjust the cooldown period (default is 5 seconds)
+        set_cooldown_period(5)  # 5 seconds between alerts
+        
         # Main data collection loop - runs until Ctrl+C is pressed
         while running:
             try:
@@ -110,7 +113,10 @@ def main():
                         print("\nANOMALY DETECTED!")
                         if lcd: 
                             lcd.display_alert("ANOMALY DETECTED!", duration=1)
-                            send_sms_alert("+17782383531", "Anomaly detected!")
+                            send_sms_alert(
+                                "+17782383531",
+                                f"Anomaly detected! Values: X={accel_x:.2f}, Y={accel_y:.2f}, Z={accel_z:.2f}"
+                            )
                     else:
                         print("\nProcessed 1-second window of data")
                 
