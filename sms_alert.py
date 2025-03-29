@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 # Track last alert time for cooldown
 last_alert_time = 0
-COOLDOWN_PERIOD = 5  # seconds
+COOLDOWN_PERIOD = 10  # seconds
 
 def get_twilio_client() -> Optional[Client]:
     """
