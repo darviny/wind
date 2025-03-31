@@ -108,15 +108,22 @@ def main():
                 accel_x, accel_y, accel_z = accel
                 gyro_x, gyro_y, gyro_z = gyro
                 
-                # Log raw data to CSV
-                filename = 'training_data.csv' if training_mode else 'sensor_data.csv'
+                # Log raw data to CSV with unpacked values
                 success = log_sensor_data_to_csv(
                     accel_x, accel_y, accel_z,
                     gyro_x, gyro_y, gyro_z,
                     temp,
-                    timestamp.isoformat(),
-                    filename
+                    timestamp.isoformat()
                 )
+                
+                # Debug: Print values being logged
+                print("\n=== Data Being Logged ===")
+                print(f"Time: {timestamp.isoformat()}")
+                print(f"Acceleration (m/s²): X={accel_x:.3f}, Y={accel_y:.3f}, Z={accel_z:.3f}")
+                print(f"Gyroscope (deg/s): X={gyro_x:.3f}, Y={gyro_y:.3f}, Z={gyro_z:.3f}")
+                print(f"Temperature: {temp:.1f}°C")
+                print(f"Log success: {success}")
+                print("=" * 20)
                 
                 if success and lcd:
                     # Update LCD with current readings
