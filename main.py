@@ -132,7 +132,7 @@ def main():
                     timestamp
                 )
                 
-                if window_processed and not training_mode:
+                if window_processed:
                     # Get features and check for anomalies
                     features = buffer._compute_features()
                     feature_values = [
@@ -173,18 +173,10 @@ def main():
                         if lcd:
                             lcd.display_alert("ANOMALY DETECTED!", duration=1)
                         if sms_enabled:
-                            # Include exceeded thresholds in SMS
-                            alert_msg = f"Anomaly detected! "
-                            if detector.using_fallback:
-                                exceeded = []
-                                for axis in ['x', 'y', 'z']:
-                                    if details['acceleration'][axis]['ratio'] > 1.0:
-                                        exceeded.append(f"Acc-{axis.upper()}")
-                                    if details['gyroscope'][axis]['ratio'] > 1.0:
-                                        exceeded.append(f"Gyro-{axis.upper()}")
-                                alert_msg += f"Exceeded: {', '.join(exceeded)}"
-                            send_sms_alert("+17782383531", alert_msg)
-                    
+                            send_sms_alert(
+                                "+17782383531",
+                                f"Anomaly detected! Values: X={accel_x:.2f}, Y={accel_y:.2f}, Z={accel_z:.2f}"
+                            )
                     print("=" * 23)
                 
                 # Wait for next sample (5 Hz = 0.2 seconds)
