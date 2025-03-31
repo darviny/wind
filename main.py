@@ -140,7 +140,7 @@ def main():
                         features['accel_x_std'], features['accel_y_std'], features['accel_z_std'],
                         features['accel_x_max'], features['accel_y_max'], features['accel_z_max']
                     ]
-                    is_anomaly, score = detector.predict(feature_values)
+                    is_anomaly, score, details = detector.predict(feature_values)
                     
                     # Print current readings
                     print("\n=== Current Readings ===")
@@ -150,14 +150,41 @@ def main():
                     print(f"Anomaly Score: {score:.3f}")
                     
                     if is_anomaly:
-                        print("*** ANOMALY DETECTED! ***")
+                        print("\n*** ANOMALY DETECTED! ***")
+                        if detector.using_fallback:
+                            # Print which thresholds were exceeded
+                            acc_details = details['acceleration']
+                            gyro_details = details['gyroscope']
+                            
+                            print(f"\nAcceleration (threshold: {acc_details['threshold']}g):")
+                            for axis in ['x', 'y', 'z']:
+                                value = acc_details[axis]['value']
+                                ratio = acc_details[axis]['ratio']
+                                if ratio > 1.0:
+                                    print(f"  {axis.upper()}-axis: {value:.2f}g ({ratio:.1f}x threshold)")
+                            
+                            print(f"\nGyroscope (threshold: {gyro_details['threshold']}°/s):")
+                            for axis in ['x', 'y', 'z']:
+                                value = gyro_details[axis]['value']
+                                ratio = gyro_details[axis]['ratio']
+                                if ratio > 1.0:
+                                    print(f"  {axis.upper()}-axis: {value:.2f}°/s ({ratio:.1f}x threshold)")
+                        
                         if lcd:
                             lcd.display_alert("ANOMALY DETECTED!", duration=1)
                         if sms_enabled:
-                            send_sms_alert(
-                                "+17782383531",
-                                f"Anomaly detected! Values: X={accel_x:.2f}, Y={accel_y:.2f}, Z={accel_z:.2f}"
-                            )
+                            # Include exceeded thresholds in SMS
+                            alert_msg = f"Anomaly detected! "
+                            if detector.using_fallback:
+                                exceeded = []
+                                for axis in ['x', 'y', 'z']:
+                                    if details['acceleration'][axis]['ratio'] > 1.0:
+                                        exceeded.append(f"Acc-{axis.upper()}")
+                                    if details['gyroscope'][axis]['ratio'] > 1.0:
+                                        exceeded.append(f"Gyro-{axis.upper()}")
+                                alert_msg += f"Exceeded: {', '.join(exceeded)}"
+                            send_sms_alert("+17782383531", alert_msg)
+                    
                     print("=" * 23)
                 
                 # Wait for next sample (5 Hz = 0.2 seconds)
