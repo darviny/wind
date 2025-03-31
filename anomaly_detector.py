@@ -60,62 +60,49 @@ class OneClassSVMDetector:
         self.acc_threshold = 2.0  # Default acceleration threshold (in g)
         self.gyro_threshold = 100.0  # Default gyroscope threshold (in deg/s)
     
-    def predict(self, features: Union[List[float], np.ndarray]) -> Tuple[bool, float, dict]:
+    def predict(self, features: Union[List[float], np.ndarray]) -> Tuple[bool, float]:
         """
         Predict if the input features represent an anomaly.
         
         Args:
             features: Array-like of features [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
+                     or any other feature set matching the trained model
         
         Returns:
-            Tuple of (is_anomaly: bool, score: float, details: dict)
+            Tuple of (is_anomaly: bool, score: float)
+            - is_anomaly: True if anomaly detected
+            - score: Anomaly score (negative distance to hyperplane for SVM,
+                     or maximum threshold ratio for fallback)
         """
         features = np.array(features).reshape(1, -1)
         
         if not self.using_fallback:
-            # One-Class SVM model detection
+            # Use One-Class SVM model
             if self.scaler:
                 features = self.scaler.transform(features)
             
+            # Get decision function score (negative distance to hyperplane)
             score = float(self.model.decision_function(features)[0])
+            # Predict returns 1 for inliers and -1 for outliers
             is_anomaly = self.model.predict(features)[0] == -1
             
-            return is_anomaly, score, {"model_score": score}
+            return is_anomaly, score
         
         else:
             # Fallback threshold-based detection
+            # Assuming features are [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
             acc_values = features[0, :3]
             gyro_values = features[0, 3:6]
             
-            # Calculate individual ratios
-            acc_ratios = np.abs(acc_values) / self.acc_threshold
-            gyro_ratios = np.abs(gyro_values) / self.gyro_threshold
+            # Calculate maximum ratios to thresholds
+            acc_ratio = np.max(np.abs(acc_values)) / self.acc_threshold
+            gyro_ratio = np.max(np.abs(gyro_values)) / self.gyro_threshold
             
-            # Get maximum ratios
-            max_acc_ratio = np.max(acc_ratios)
-            max_gyro_ratio = np.max(gyro_ratios)
-            
-            # Overall score is the maximum ratio
-            score = max(max_acc_ratio, max_gyro_ratio)
+            # Use maximum ratio as score
+            score = max(acc_ratio, gyro_ratio)
             is_anomaly = score > 1.0
             
-            # Prepare detailed threshold information
-            details = {
-                "acceleration": {
-                    "x": {"value": float(acc_values[0]), "ratio": float(acc_ratios[0])},
-                    "y": {"value": float(acc_values[1]), "ratio": float(acc_ratios[1])},
-                    "z": {"value": float(acc_values[2]), "ratio": float(acc_ratios[2])},
-                    "threshold": self.acc_threshold
-                },
-                "gyroscope": {
-                    "x": {"value": float(gyro_values[0]), "ratio": float(gyro_ratios[0])},
-                    "y": {"value": float(gyro_values[1]), "ratio": float(gyro_ratios[1])},
-                    "z": {"value": float(gyro_values[2]), "ratio": float(gyro_ratios[2])},
-                    "threshold": self.gyro_threshold
-                }
-            }
-            
-            return is_anomaly, score, details
+            return is_anomaly, score
     
     def set_fallback_thresholds(self, acc_threshold: float = None, 
                               gyro_threshold: float = None):
@@ -143,9 +130,8 @@ if __name__ == "__main__":
     example_features = [0.1, 0.2, 1.1, 5.0, -2.0, 1.0]
     
     # Get prediction
-    is_anomaly, score, details = detector.predict(example_features)
+    is_anomaly, score = detector.predict(example_features)
     
     print(f"Using fallback: {detector.using_fallback}")
     print(f"Anomaly detected: {is_anomaly}")
     print(f"Anomaly score: {score:.3f}")
-    print(f"Threshold details: {details}")

@@ -132,7 +132,7 @@ def main():
                     timestamp
                 )
                 
-                if window_processed:
+                if window_processed and not training_mode:
                     # Get features and check for anomalies
                     features = buffer._compute_features()
                     feature_values = [
@@ -140,7 +140,7 @@ def main():
                         features['accel_x_std'], features['accel_y_std'], features['accel_z_std'],
                         features['accel_x_max'], features['accel_y_max'], features['accel_z_max']
                     ]
-                    is_anomaly, score, details = detector.predict(feature_values)
+                    is_anomaly, score = detector.predict(feature_values)
                     
                     # Print current readings
                     print("\n=== Current Readings ===")
@@ -150,26 +150,7 @@ def main():
                     print(f"Anomaly Score: {score:.3f}")
                     
                     if is_anomaly:
-                        print("\n*** ANOMALY DETECTED! ***")
-                        if detector.using_fallback:
-                            # Print which thresholds were exceeded
-                            acc_details = details['acceleration']
-                            gyro_details = details['gyroscope']
-                            
-                            print(f"\nAcceleration (threshold: {acc_details['threshold']}g):")
-                            for axis in ['x', 'y', 'z']:
-                                value = acc_details[axis]['value']
-                                ratio = acc_details[axis]['ratio']
-                                if ratio > 1.0:
-                                    print(f"  {axis.upper()}-axis: {value:.2f}g ({ratio:.1f}x threshold)")
-                            
-                            print(f"\nGyroscope (threshold: {gyro_details['threshold']}°/s):")
-                            for axis in ['x', 'y', 'z']:
-                                value = gyro_details[axis]['value']
-                                ratio = gyro_details[axis]['ratio']
-                                if ratio > 1.0:
-                                    print(f"  {axis.upper()}-axis: {value:.2f}°/s ({ratio:.1f}x threshold)")
-                        
+                        print("*** ANOMALY DETECTED! ***")
                         if lcd:
                             lcd.display_alert("ANOMALY DETECTED!", duration=1)
                         if sms_enabled:
