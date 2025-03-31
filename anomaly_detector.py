@@ -69,9 +69,6 @@ class OneClassSVMDetector:
         
         Returns:
             Tuple of (is_anomaly: bool, score: float, details: dict)
-            - is_anomaly: True if anomaly detected
-            - score: Anomaly score
-            - details: Dictionary with threshold details
         """
         features = np.array(features).reshape(1, -1)
         
