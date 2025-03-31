@@ -123,16 +123,22 @@ def main():
                     # Now pass the list of values instead of the dictionary
                     is_anomaly, score = detector.predict(feature_values)
                     
+                    # Print current readings regardless of anomaly status
+                    print("\n=== Current Readings ===")
+                    print(f"Acceleration (m/s²): X={accel_x:.2f}, Y={accel_y:.2f}, Z={accel_z:.2f}")
+                    print(f"Gyroscope (deg/s): X={gyro_x:.2f}, Y={gyro_y:.2f}, Z={gyro_z:.2f}")
+                    print(f"Temperature: {temp:.1f}°C")
+                    print(f"Anomaly Score: {score:.3f}")
+                    
                     if is_anomaly:
-                        print(f"Anomaly detected with score: {score:.3f}")
+                        print("*** ANOMALY DETECTED! ***")
                         if lcd: 
                             lcd.display_alert("ANOMALY DETECTED!", duration=1)
                             send_sms_alert(
                                 "+17782383531",
                                 f"Anomaly detected! Values: X={accel_x:.2f}, Y={accel_y:.2f}, Z={accel_z:.2f}"
                             )
-                    else:
-                        print("\nProcessed 1-second window of data")
+                    print("=" * 23)  # Match the header line length
                 
                 # Wait for next sample (5 Hz = 0.2 seconds)
                 time.sleep(0.2)
