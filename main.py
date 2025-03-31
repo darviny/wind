@@ -114,7 +114,14 @@ def main():
                 if window_processed:
                     # Get features and check for anomalies
                     features = buffer._compute_features()
-                    is_anomaly, score = detector.predict(features)
+                    # Convert features dictionary to a list in a fixed order
+                    feature_values = [
+                        features['accel_x_mean'], features['accel_y_mean'], features['accel_z_mean'],
+                        features['accel_x_std'], features['accel_y_std'], features['accel_z_std'],
+                        features['accel_x_max'], features['accel_y_max'], features['accel_z_max']
+                    ]
+                    # Now pass the list of values instead of the dictionary
+                    is_anomaly, score = detector.predict(feature_values)
                     
                     if is_anomaly:
                         print(f"Anomaly detected with score: {score:.3f}")
