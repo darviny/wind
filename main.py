@@ -89,7 +89,7 @@ def main():
             # Initialize detector
             detector = OneClassSVMDetector()
             if detector.using_fallback:
-                detector.set_fallback_thresholds(acc_threshold=2.5, gyro_threshold=150.0)
+                detector.set_fallback_thresholds(acc_threshold=10, gyro_threshold=1500.0)
             
             # Only set cooldown if SMS is enabled
             if sms_enabled:
