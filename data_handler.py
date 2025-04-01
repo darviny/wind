@@ -16,7 +16,7 @@ import time
 import statistics
 from datetime import datetime
 from collections import deque
-from anomaly_detector import check_anomaly, DEFAULT_THRESHOLDS
+from anomaly_detector import OneClassSVMDetector
 
 
 def log_acceleration_to_csv(x, y, z, timestamp=None, filename='sensor_data.csv'):
@@ -240,7 +240,6 @@ class AccelerationBuffer:
             expected_sample_rate (int): Expected samples per second. Used to estimate buffer size.
         """
         self.window_size = window_size
-        # Initialize deques with estimated capacity based on window size and sample rate
         self.buffer_capacity = int(window_size * expected_sample_rate * 1.5)  # 1.5x for safety
         self.timestamps = deque(maxlen=self.buffer_capacity)
         self.x_values = deque(maxlen=self.buffer_capacity)
@@ -248,7 +247,8 @@ class AccelerationBuffer:
         self.z_values = deque(maxlen=self.buffer_capacity)
         self.start_time = None
         self.features_filename = 'features_data.csv'
-        self.thresholds = DEFAULT_THRESHOLDS
+        # Initialize the anomaly detector
+        self.detector = OneClassSVMDetector()
     
     def add_reading(self, x, y, z, timestamp=None):
         """
@@ -303,8 +303,8 @@ class AccelerationBuffer:
         # Compute statistical features
         features = self._compute_features()
         
-        # Check for anomalies
-        is_anomaly, exceeded_features = check_anomaly(features, self.thresholds)
+        # Check for anomalies using the detector
+        is_anomaly, score = self.detector.predict(list(features.values()))
         
         # Get timestamp for this window (use the last timestamp)
         window_timestamp = self.timestamps[-1].isoformat()
@@ -315,8 +315,9 @@ class AccelerationBuffer:
         # Print message if anomaly detected
         if is_anomaly:
             print(f"ANOMALY DETECTED at {window_timestamp}:")
-            for feature, (value, threshold) in exceeded_features.items():
-                print(f"  {feature}: {value:.4f} exceeds threshold {threshold}")
+            print(f"Anomaly score: {score:.4f}")
+            for feature_name, value in features.items():
+                print(f"  {feature_name}: {value:.4f}")
     
     def _compute_features(self):
         """
@@ -338,15 +339,6 @@ class AccelerationBuffer:
             "accel_z_max": max(self.z_values)
         }
         return features
-    
-    def set_thresholds(self, thresholds):
-        """
-        Set custom thresholds for anomaly detection.
-        
-        Args:
-            thresholds (dict): Dictionary of feature names and threshold values.
-        """
-        self.thresholds = thresholds
     
     def set_features_filename(self, filename):
         """

@@ -2,33 +2,22 @@
 """
 sms_alert.py - SMS alerting module using Twilio API with cooldown period.
 
-This module provides functionality to send SMS alerts when anomalies are detected,
-with a cooldown period between alerts to prevent spam.
-
-Environment variables required:
-    - TWILIO_ACCOUNT_SID: Your Twilio account SID
-    - TWILIO_AUTH_TOKEN: Your Twilio authentication token
-    - TWILIO_FROM_PHONE: Your Twilio phone number to send from
-
-Usage:
-    from sms_alert import send_sms_alert
-    
-    # Send an alert
-    success = send_sms_alert("+1234567890", "Anomaly detected!")
-    
-Configuration:
-    Export your Twilio credentials as environment variables:
-    export TWILIO_ACCOUNT_SID='your_account_sid'
-    export TWILIO_AUTH_TOKEN='your_auth_token'
-    export TWILIO_FROM_PHONE='+1234567890'
+Environment variables can be set in a .env file:
+    TWILIO_ACCOUNT_SID=your_account_sid
+    TWILIO_AUTH_TOKEN=your_auth_token
+    TWILIO_FROM_PHONE=+1234567890
 """
 
 import os
 import time
 import logging
 from typing import Optional
+from dotenv import load_dotenv
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(
@@ -42,18 +31,13 @@ last_alert_time = 0
 COOLDOWN_PERIOD = 10  # seconds
 
 def get_twilio_client() -> Optional[Client]:
-    """
-    Initialize Twilio client using environment variables.
-    
-    Returns:
-        Optional[Client]: Twilio client instance or None if credentials are missing
-    """
-    # Get credentials from environment variables
+    """Initialize Twilio client using credentials from .env file."""
     account_sid = os.getenv('TWILIO_ACCOUNT_SID')
     auth_token = os.getenv('TWILIO_AUTH_TOKEN')
     
     if not account_sid or not auth_token:
-        logger.error("Missing Twilio credentials in environment variables")
+        logger.error("Missing Twilio credentials in .env file")
+        logger.error("Please create a .env file with TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN")
         return None
     
     return Client(account_sid, auth_token)
@@ -78,12 +62,12 @@ def send_sms_alert(to_phone: str, message: str) -> bool:
     
     if time_since_last_alert < COOLDOWN_PERIOD:
         logger.info(f"Skipping alert - in cooldown period ({time_since_last_alert:.1f}s < {COOLDOWN_PERIOD}s)")
-        return True  # Return True as this is expected behavior
+        return True
     
-    # Get the 'from' phone number from environment
+    # Get the 'from' phone number from .env
     from_phone = os.getenv('TWILIO_FROM_PHONE')
     if not from_phone:
-        logger.error("Missing TWILIO_FROM_PHONE in environment variables")
+        logger.error("Missing TWILIO_FROM_PHONE in .env file")
         return False
     
     # Initialize Twilio client
@@ -113,12 +97,7 @@ def send_sms_alert(to_phone: str, message: str) -> bool:
         return False
 
 def set_cooldown_period(seconds: int):
-    """
-    Set the cooldown period between alerts.
-    
-    Args:
-        seconds (int): Number of seconds to wait between alerts
-    """
+    """Set the cooldown period between alerts."""
     global COOLDOWN_PERIOD
     COOLDOWN_PERIOD = seconds
     logger.info(f"Alert cooldown period set to {seconds} seconds")
@@ -127,20 +106,20 @@ def set_cooldown_period(seconds: int):
 if __name__ == "__main__":
     import sys
     
-    # Test the SMS alert functionality with cooldown
+    # Test the SMS alert functionality
     try:
         # Check if required environment variables are set
         required_vars = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM_PHONE']
         missing_vars = [var for var in required_vars if not os.getenv(var)]
         
         if missing_vars:
-            print("Error: Missing required environment variables:")
+            print("Error: Missing required variables in .env file:")
             for var in missing_vars:
                 print(f"  - {var}")
-            print("\nPlease set them before running this script:")
-            print("export TWILIO_ACCOUNT_SID='your_account_sid'")
-            print("export TWILIO_AUTH_TOKEN='your_auth_token'")
-            print("export TWILIO_FROM_PHONE='+1234567890'")
+            print("\nPlease create a .env file with the following:")
+            print("TWILIO_ACCOUNT_SID=your_account_sid")
+            print("TWILIO_AUTH_TOKEN=your_auth_token")
+            print("TWILIO_FROM_PHONE=+1234567890")
             sys.exit(1)
         
         # Test phone number (should be configured by user)

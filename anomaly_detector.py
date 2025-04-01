@@ -1,187 +1,137 @@
 #!/usr/bin/env python3
 """
-anomaly_detector.py - Module for detecting anomalies in MPU6050 sensor data.
+anomaly_detector.py - Anomaly detection module supporting both One-Class SVM
+and threshold-based detection methods.
 
-This module provides functionality to check if sensor data features exceed
-predefined thresholds for accelerometer, gyroscope, and temperature readings.
+The module attempts to load a pre-trained One-Class SVM model from 'model.pkl'.
+If the model file is not found, it falls back to threshold-based detection.
 """
 
-# Default thresholds for sensor features
-DEFAULT_THRESHOLDS = {
-    # Accelerometer thresholds (m/s²)
-    "accel_x_mean": 9.9,    # Allow for gravity on any axis
-    "accel_y_mean": 10.9,    # Allow for gravity on any axis
-    "accel_z_mean": 9.9,    # Allow for gravity on any axis
-    "accel_x_std": 0.5,     # Increased to detect significant shaking
-    "accel_y_std": 0.5,     # Increased to detect significant shaking
-    "accel_z_std": 0.5,     # Increased to detect significant shaking
-    "accel_x_max": 11.0,    # Allow for gravity plus movement
-    "accel_y_max": 11.0,    # Allow for gravity plus movement
-    "accel_z_max": 11.0,    # Allow for gravity plus movement
-    
-    # Gyroscope thresholds (rad/s)
-    "gyro_x_mean": 0.1,
-    "gyro_y_mean": 0.1,
-    "gyro_z_mean": 0.1,
-    "gyro_x_std": 0.05,
-    "gyro_y_std": 0.05,
-    "gyro_z_std": 0.05,
-    "gyro_x_max": 0.5,
-    "gyro_y_max": 0.5,
-    "gyro_z_max": 0.5,
-    
-    # Temperature thresholds (°C)
-    "temp_mean": 50,    # Maximum average temperature
-    "temp_std": 2,      # Maximum temperature variation
-    "temp_max": 85      # Maximum absolute temperature
-}
+import os
+import logging
+import numpy as np
+from typing import Union, List, Tuple
+from sklearn.preprocessing import StandardScaler
+import joblib
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-def check_anomaly(features, thresholds=None):
+class OneClassSVMDetector:
     """
-    Check if any feature exceeds its corresponding threshold.
+    Anomaly detector using One-Class SVM with fallback to threshold-based detection.
     
-    Args:
-        features (dict): Dictionary of feature names and their values.
-            Example: {"accel_x_mean": 0.01, "gyro_y_std": 0.005, "temp_mean": 25}
-        thresholds (dict, optional): Dictionary of feature names and their threshold values.
-            If None, DEFAULT_THRESHOLDS will be used.
-    
-    Returns:
-        tuple: (is_anomaly, exceeded_features)
-            - is_anomaly (bool): True if any feature exceeds its threshold
-            - exceeded_features (dict): Features that exceeded their thresholds
+    Attributes:
+        model: Loaded One-Class SVM model or None if using fallback
+        scaler: StandardScaler for feature normalization or None if not used
+        using_fallback (bool): Indicates if using fallback threshold detection
     """
-    # Use default thresholds if none provided
-    if thresholds is None:
-        thresholds = DEFAULT_THRESHOLDS
     
-    # Track features that exceed thresholds
-    exceeded_features = {}
-    
-    # Check each feature against its threshold
-    for feature, value in features.items():
-        # Skip if this feature doesn't have a threshold
-        if feature not in thresholds:
-            continue
+    def __init__(self, model_path: str = 'model.pkl', scaler_path: str = 'scaler.pkl'):
+        """
+        Initialize the detector by loading the model and scaler if available.
         
-        # Check if the feature exceeds its threshold
-        threshold = thresholds[feature]
-        if value > threshold:
-            exceeded_features[feature] = (value, threshold)
-    
-    # Return True if any features exceeded thresholds
-    is_anomaly = len(exceeded_features) > 0
-    
-    return is_anomaly, exceeded_features
-
-
-def analyze_readings(readings):
-    """
-    Calculate statistical features from a list of sensor readings.
-    
-    Args:
-        readings (list): List of dictionaries containing sensor readings.
-            Example: [
-                {
-                    'acceleration': {'x': 0.1, 'y': 0.2, 'z': 9.8},
-                    'gyro': {'x': 0.01, 'y': 0.02, 'z': 0.01},
-                    'temperature': 25.0
-                },
-                ...
-            ]
-    
-    Returns:
-        dict: Dictionary of calculated features.
-    """
-    import statistics
-    
-    # Initialize empty lists for each measurement
-    accel_x, accel_y, accel_z = [], [], []
-    gyro_x, gyro_y, gyro_z = [], [], []
-    temperatures = []
-    
-    # Extract values from readings
-    for reading in readings:
-        # Acceleration values
-        accel = reading['acceleration']
-        accel_x.append(accel['x'])
-        accel_y.append(accel['y'])
-        accel_z.append(accel['z'])
+        Args:
+            model_path: Path to the saved One-Class SVM model
+            scaler_path: Path to the saved StandardScaler
+        """
+        self.model = None
+        self.scaler = None
+        self.using_fallback = False
         
-        # Gyroscope values
-        gyro = reading['gyro']
-        gyro_x.append(gyro['x'])
-        gyro_y.append(gyro['y'])
-        gyro_z.append(gyro['z'])
-        
-        # Temperature values
-        temperatures.append(reading['temperature'])
+        try:
+            self.model = joblib.load(model_path)
+            logger.info("Successfully loaded One-Class SVM model")
+            
+            if os.path.exists(scaler_path):
+                self.scaler = joblib.load(scaler_path)
+                logger.info("Successfully loaded scaler")
+                
+        except (FileNotFoundError, Exception) as e:
+            logger.warning(f"Could not load model/scaler: {str(e)}")
+            logger.warning("Falling back to threshold-based detection")
+            self.using_fallback = True
+            
+        # Fallback thresholds
+        self.acc_threshold = 2.0  # Default acceleration threshold (in g)
+        self.gyro_threshold = 100.0  # Default gyroscope threshold (in deg/s)
     
-    # Helper function for standard deviation
-    def safe_stdev(values):
-        return statistics.stdev(values) if len(values) > 1 else 0
-    
-    # Calculate features
-    features = {
-        # Accelerometer features
-        "accel_x_mean": statistics.mean(accel_x),
-        "accel_y_mean": statistics.mean(accel_y),
-        "accel_z_mean": statistics.mean(accel_z),
-        "accel_x_std": safe_stdev(accel_x),
-        "accel_y_std": safe_stdev(accel_y),
-        "accel_z_std": safe_stdev(accel_z),
-        "accel_x_max": max(accel_x),
-        "accel_y_max": max(accel_y),
-        "accel_z_max": max(accel_z),
+    def predict(self, features: Union[List[float], np.ndarray]) -> Tuple[bool, float]:
+        """
+        Predict if the input features represent an anomaly.
         
-        # Gyroscope features
-        "gyro_x_mean": statistics.mean(gyro_x),
-        "gyro_y_mean": statistics.mean(gyro_y),
-        "gyro_z_mean": statistics.mean(gyro_z),
-        "gyro_x_std": safe_stdev(gyro_x),
-        "gyro_y_std": safe_stdev(gyro_y),
-        "gyro_z_std": safe_stdev(gyro_z),
-        "gyro_x_max": max(gyro_x),
-        "gyro_y_max": max(gyro_y),
-        "gyro_z_max": max(gyro_z),
+        Args:
+            features: Array-like of features [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
+                     or any other feature set matching the trained model
         
-        # Temperature features
-        "temp_mean": statistics.mean(temperatures),
-        "temp_std": safe_stdev(temperatures),
-        "temp_max": max(temperatures)
-    }
+        Returns:
+            Tuple of (is_anomaly: bool, score: float)
+            - is_anomaly: True if anomaly detected
+            - score: Anomaly score (negative distance to hyperplane for SVM,
+                     or maximum threshold ratio for fallback)
+        """
+        features = np.array(features).reshape(1, -1)
+        
+        if not self.using_fallback:
+            # Use One-Class SVM model
+            if self.scaler:
+                features = self.scaler.transform(features)
+            
+            # Get decision function score (negative distance to hyperplane)
+            score = float(self.model.decision_function(features)[0])
+            # Predict returns 1 for inliers and -1 for outliers
+            is_anomaly = self.model.predict(features)[0] == -1
+            
+            return is_anomaly, score
+        
+        else:
+            # Fallback threshold-based detection
+            # Assuming features are [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
+            acc_values = features[0, :3]
+            gyro_values = features[0, 3:6]
+            
+            # Calculate maximum ratios to thresholds
+            acc_ratio = np.max(np.abs(acc_values)) / self.acc_threshold
+            gyro_ratio = np.max(np.abs(gyro_values)) / self.gyro_threshold
+            
+            # Use maximum ratio as score
+            score = max(acc_ratio, gyro_ratio)
+            is_anomaly = score > 1.0
+            
+            return is_anomaly, score
     
-    return features
-
+    def set_fallback_thresholds(self, acc_threshold: float = None, 
+                              gyro_threshold: float = None):
+        """
+        Update the fallback detection thresholds.
+        
+        Args:
+            acc_threshold: Acceleration threshold in g
+            gyro_threshold: Gyroscope threshold in degrees/second
+        """
+        if acc_threshold is not None:
+            self.acc_threshold = acc_threshold
+        if gyro_threshold is not None:
+            self.gyro_threshold = gyro_threshold
+        
+        logger.info(f"Updated fallback thresholds: acc={self.acc_threshold}g, "
+                   f"gyro={self.gyro_threshold}deg/s")
 
 # Example usage
 if __name__ == "__main__":
-    # Example sensor readings
-    sample_readings = [
-        {
-            'acceleration': {'x': 0.01, 'y': 0.02, 'z': 9.81},
-            'gyro': {'x': 0.01, 'y': 0.02, 'z': 0.01},
-            'temperature': 25.0
-        },
-        {
-            'acceleration': {'x': 0.02, 'y': 0.03, 'z': 9.82},
-            'gyro': {'x': 0.02, 'y': 0.01, 'z': 0.02},
-            'temperature': 25.1
-        }
-    ]
+    # Initialize detector
+    detector = OneClassSVMDetector()
     
-    # Calculate features from the readings
-    features = analyze_readings(sample_readings)
-    print("Calculated features:")
-    for feature, value in features.items():
-        print(f"  {feature}: {value:.4f}")
+    # Example features: [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
+    example_features = [0.1, 0.2, 1.1, 5.0, -2.0, 1.0]
     
-    # Check for anomalies using default thresholds
-    is_anomaly, exceeded = check_anomaly(features)
+    # Get prediction
+    is_anomaly, score = detector.predict(example_features)
     
-    print(f"\nAnomaly detected: {is_anomaly}")
-    if is_anomaly:
-        print("Exceeded thresholds:")
-        for feature, (value, threshold) in exceeded.items():
-            print(f"  {feature}: {value:.4f} exceeds threshold {threshold}")
+    print(f"Using fallback: {detector.using_fallback}")
+    print(f"Anomaly detected: {is_anomaly}")
+    print(f"Anomaly score: {score:.3f}")
