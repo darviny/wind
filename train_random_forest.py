@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """
-train_random_forest.py - Train and save both versions of the Random Forest model.
+train_random_forest.py - Train and save Random Forest model for wind turbine anomaly detection.
 
-This script trains a model to classify wind turbine operation into three categories:
-- Normal operation (0)
-- Tempered blade anomaly (1)
-- Gearbox imbalance anomaly (2)
-
-The model is trained on engineered features from sensor data and saved for later use.
+Usage:
+    python train_random_forest.py --input labeled_sensor_data.csv --output rf_model.pkl
 """
 
 import pandas as pd
@@ -18,6 +14,7 @@ from sklearn.metrics import classification_report, confusion_matrix, accuracy_sc
 import joblib
 import json
 import os
+import argparse
 
 def load_and_prepare_data(filepath):
     """
@@ -37,8 +34,6 @@ def load_and_prepare_data(filepath):
     
     df = pd.read_csv(filepath)
     print(f"Initial dataset shape: {df.shape}")
-    print("\nFirst 5 rows:")
-    print(df.head())
     
     # Handle missing values
     initial_rows = len(df)
@@ -47,22 +42,56 @@ def load_and_prepare_data(filepath):
     if rows_dropped > 0:
         print(f"\nDropped {rows_dropped} rows with missing values")
     
+    # Define feature groups
+    acf_features = [
+        # Accelerometer ACF features
+        'accel_x_acf_lag1', 'accel_x_acf_lag2', 'accel_x_acf_lag3', 'accel_x_acf_lag4',
+        'accel_y_acf_lag1', 'accel_y_acf_lag2', 'accel_y_acf_lag3', 'accel_y_acf_lag4',
+        'accel_z_acf_lag1', 'accel_z_acf_lag2', 'accel_z_acf_lag3', 'accel_z_acf_lag4',
+        # Gyroscope ACF features
+        'gyro_x_acf_lag1', 'gyro_x_acf_lag2', 'gyro_x_acf_lag3', 'gyro_x_acf_lag4',
+        'gyro_y_acf_lag1', 'gyro_y_acf_lag2', 'gyro_y_acf_lag3', 'gyro_y_acf_lag4',
+        'gyro_z_acf_lag1', 'gyro_z_acf_lag2', 'gyro_z_acf_lag3', 'gyro_z_acf_lag4'
+    ]
+    
+    statistical_features = [
+        # Accelerometer statistical features
+        'accel_x_mean', 'accel_x_std', 'accel_x_min', 'accel_x_max', 'accel_x_median', 'accel_x_range',
+        'accel_y_mean', 'accel_y_std', 'accel_y_min', 'accel_y_max', 'accel_y_median', 'accel_y_range',
+        'accel_z_mean', 'accel_z_std', 'accel_z_min', 'accel_z_max', 'accel_z_median', 'accel_z_range',
+        # Gyroscope statistical features
+        'gyro_x_mean', 'gyro_x_std', 'gyro_x_min', 'gyro_x_max', 'gyro_x_median', 'gyro_x_range',
+        'gyro_y_mean', 'gyro_y_std', 'gyro_y_min', 'gyro_y_max', 'gyro_y_median', 'gyro_y_range',
+        'gyro_z_mean', 'gyro_z_std', 'gyro_z_min', 'gyro_z_max', 'gyro_z_median', 'gyro_z_range'
+    ]
+    
+    # Combine all features
+    feature_cols = acf_features + statistical_features
+    
+    # Verify all features exist
+    missing_cols = [col for col in feature_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Missing expected features: {missing_cols}")
+    
     # Separate features and target
-    target_col = 'label'
-    feature_cols = [col for col in df.columns if col not in [target_col, 'timestamp', 'condition']]
-    
     X = df[feature_cols]
-    y = df[target_col]
+    y = df['label']
     
-    print("\nFeature columns:", feature_cols)
+    # Print feature summary
+    print("\nFeature Summary:")
+    print("=" * 50)
+    print(f"Autocorrelation features: {len(acf_features)} (4 lags × 6 sensors)")
+    print(f"Statistical features: {len(statistical_features)} (6 stats × 6 sensors)")
+    print(f"Total features: {len(feature_cols)}")
     print(f"Feature matrix shape: {X.shape}")
+    
     print("\nClass distribution:")
     print(y.value_counts().sort_index())
     
     return X, y, feature_cols
 
-def train_and_save_model(X, y, feature_cols, model_prefix):
-    """Train and save a model with given features."""
+def train_and_save_model(X, y, feature_cols, output_file):
+    """Train and save the model."""
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
@@ -76,55 +105,66 @@ def train_and_save_model(X, y, feature_cols, model_prefix):
     y_pred = model.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
     
-    print(f"\n{model_prefix} Results:")
+    print("\nModel Results:")
     print("=" * 50)
-    print(f"Features used: {feature_cols}")
     print(f"Accuracy: {accuracy:.4f}")
     print("\nClassification Report:")
     print(classification_report(y_test, y_pred,
                               target_names=['Normal', 'Tempered Blade', 'Gearbox']))
     
+    print("\nFeature Importance:")
+    print("=" * 50)
+    importances = pd.DataFrame({
+        'feature': feature_cols,
+        'importance': model.feature_importances_
+    }).sort_values('importance', ascending=False)
+    print(importances)
+    
     # Save model and features
-    model_file = f'{model_prefix}_model.pkl'
-    features_file = f'{model_prefix}_features.json'
+    joblib.dump({
+        'model': model,
+        'features': feature_cols,
+        'feature_importance': importances.to_dict()
+    }, output_file)
     
-    joblib.dump(model, model_file)
-    with open(features_file, 'w') as f:
-        json.dump(feature_cols, f)
-    
-    print(f"\nSaved model as {model_file}")
-    print(f"Saved features as {features_file}")
+    print(f"\nSaved model and features to {output_file}")
     
     return accuracy
 
 def main():
-    print("Training and saving both model versions...")
+    parser = argparse.ArgumentParser(
+        description="Train Random Forest classifier for wind turbine anomaly detection"
+    )
     
-    # Load data
-    df = pd.read_csv('labeled_sensor_data.csv')
-    y = df['label']
+    parser.add_argument(
+        '--input',
+        required=True,
+        help='Path to labeled sensor data CSV file'
+    )
     
-    # Define feature sets
-    all_features = [col for col in df.columns if col not in ['label', 'timestamp', 'condition']]
-    vibration_features = [col for col in all_features if 'temperature' not in col]
+    parser.add_argument(
+        '--output',
+        default='rf_model.pkl',
+        help='Output model file (default: rf_model.pkl)'
+    )
     
-    # Train and save model with temperature
-    X_all = df[all_features]
-    acc_all = train_and_save_model(X_all, y, all_features, "with_temp")
+    args = parser.parse_args()
     
-    # Train and save model without temperature
-    X_vib = df[vibration_features]
-    acc_vib = train_and_save_model(X_vib, y, vibration_features, "without_temp")
-    
-    # Print comparison summary
-    print("\nComparison Summary:")
-    print("=" * 50)
-    print(f"Accuracy with temperature: {acc_all:.4f}")
-    print(f"Accuracy without temperature: {acc_vib:.4f}")
-    print(f"Difference: {(acc_vib - acc_all)*100:.2f}%")
-    
-    print("\nBoth models have been saved successfully!")
-    return 0
+    try:
+        # Load data
+        X, y, feature_cols = load_and_prepare_data(args.input)
+        
+        print(f"\nTraining Random Forest with {len(feature_cols)} features...")
+        accuracy = train_and_save_model(X, y, feature_cols, args.output)
+        
+        print(f"\nTraining completed successfully! Final accuracy: {accuracy:.4f}")
+        return 0
+        
+    except Exception as e:
+        print(f"Error during training: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
 if __name__ == "__main__":
     exit(main()) 

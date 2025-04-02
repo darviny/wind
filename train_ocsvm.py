@@ -46,15 +46,31 @@ def load_data(filepath):
 
 def select_features(df):
     """Select relevant features for training."""
-    # Define feature columns based on the actual columns in your data
-    feature_cols = [
-        'accel_x_mean', 'accel_x_std',
-        'accel_y_mean', 'accel_y_std',
-        'accel_z_mean', 'accel_z_std',
-        'gyro_x_mean', 'gyro_x_std',
-        'gyro_y_mean', 'gyro_y_std',
-        'gyro_z_mean', 'gyro_z_std'
+    # Define feature columns for both ACF and statistical features
+    acf_features = [
+        # Accelerometer ACF features
+        'accel_x_acf_lag1', 'accel_x_acf_lag2', 'accel_x_acf_lag3', 'accel_x_acf_lag4',
+        'accel_y_acf_lag1', 'accel_y_acf_lag2', 'accel_y_acf_lag3', 'accel_y_acf_lag4',
+        'accel_z_acf_lag1', 'accel_z_acf_lag2', 'accel_z_acf_lag3', 'accel_z_acf_lag4',
+        # Gyroscope ACF features
+        'gyro_x_acf_lag1', 'gyro_x_acf_lag2', 'gyro_x_acf_lag3', 'gyro_x_acf_lag4',
+        'gyro_y_acf_lag1', 'gyro_y_acf_lag2', 'gyro_y_acf_lag3', 'gyro_y_acf_lag4',
+        'gyro_z_acf_lag1', 'gyro_z_acf_lag2', 'gyro_z_acf_lag3', 'gyro_z_acf_lag4'
     ]
+    
+    statistical_features = [
+        # Accelerometer statistical features
+        'accel_x_mean', 'accel_x_std', 'accel_x_min', 'accel_x_max', 'accel_x_median', 'accel_x_range',
+        'accel_y_mean', 'accel_y_std', 'accel_y_min', 'accel_y_max', 'accel_y_median', 'accel_y_range',
+        'accel_z_mean', 'accel_z_std', 'accel_z_min', 'accel_z_max', 'accel_z_median', 'accel_z_range',
+        # Gyroscope statistical features
+        'gyro_x_mean', 'gyro_x_std', 'gyro_x_min', 'gyro_x_max', 'gyro_x_median', 'gyro_x_range',
+        'gyro_y_mean', 'gyro_y_std', 'gyro_y_min', 'gyro_y_max', 'gyro_y_median', 'gyro_y_range',
+        'gyro_z_mean', 'gyro_z_std', 'gyro_z_min', 'gyro_z_max', 'gyro_z_median', 'gyro_z_range'
+    ]
+    
+    # Combine all features
+    feature_cols = acf_features + statistical_features
     
     # Verify all columns exist
     missing_cols = [col for col in feature_cols if col not in df.columns]
@@ -63,8 +79,18 @@ def select_features(df):
         return None
     
     X = df[feature_cols]
+    
+    # Print feature summary
+    print("\nFeature Selection Summary:")
+    print("=" * 50)
+    print(f"Autocorrelation features: {len(acf_features)}")
+    print(f"Statistical features: {len(statistical_features)}")
+    print(f"Total features: {len(feature_cols)}")
     print(f"\nFeature matrix shape: {X.shape}")
-    print("Selected features:", feature_cols)
+    
+    # Print sample of each feature type
+    print("\nSample ACF features:", acf_features[:3], "...")
+    print("Sample statistical features:", statistical_features[:3], "...")
     
     return X
 

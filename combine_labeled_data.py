@@ -2,16 +2,16 @@
 """
 combine_labeled_data.py - Combine and label sensor data from different operating conditions.
 
-This script combines three CSV files containing wind turbine sensor data:
-- Normal operation (label 0)
-- Tempered blade anomaly (label 1)
-- Gearbox imbalance anomaly (label 2)
-
-The combined dataset is shuffled and saved for machine learning purposes.
+Usage:
+    python combine_labeled_data.py --normal sensor_data_normal_aggregated.csv \
+                                 --anomaly1 anomaly_type1_aggregated.csv \
+                                 --anomaly2 anomaly_type2_aggregated.csv \
+                                 --output labeled_sensor_data.csv
 """
 
 import pandas as pd
 import os
+import argparse
 
 def load_csv_data(filepath, description):
     """
@@ -32,7 +32,7 @@ def load_csv_data(filepath, description):
         df = pd.read_csv(filepath)
         print(f"\nLoaded {description}:")
         print(f"Shape: {df.shape}")
-        print(f"First few timestamps: {df['timestamp'].head().tolist()}")
+        print("Number of features:", len(df.columns))
         return df
         
     except Exception as e:
@@ -40,21 +40,52 @@ def load_csv_data(filepath, description):
         return None
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Combine sensor data from normal operation and anomaly conditions"
+    )
+    
+    parser.add_argument(
+        '--normal',
+        required=True,
+        help='Path to normal operation data CSV'
+    )
+    
+    parser.add_argument(
+        '--anomaly1',
+        required=True,
+        help='Path to tempered blade anomaly data CSV'
+    )
+    
+    parser.add_argument(
+        '--anomaly2',
+        required=True,
+        help='Path to gearbox imbalance anomaly data CSV'
+    )
+    
+    parser.add_argument(
+        '--output',
+        default='labeled_sensor_data.csv',
+        help='Output file path (default: labeled_sensor_data.csv)'
+    )
+    
+    args = parser.parse_args()
+    
     # Step 1: Load each dataset
     print("Loading datasets...")
     
     normal_data = load_csv_data(
-        'sensor_data_normal_aggregated.csv',
+        args.normal,
         'normal operation'
     )
     
     anomaly1_data = load_csv_data(
-        'anomaly_type1_aggregated.csv',
+        args.anomaly1,
         'tempered blade anomaly'
     )
     
     anomaly2_data = load_csv_data(
-        'anomaly_type2_aggregated.csv',
+        args.anomaly2,
         'gearbox imbalance anomaly'
     )
     
@@ -99,20 +130,28 @@ def main():
     ).reset_index(drop=True)
     
     # Step 5: Save to CSV
-    output_file = 'labeled_sensor_data.csv'
-    print(f"\nSaving to {output_file}...")
-    
-    shuffled_data.to_csv(output_file, index=False)
+    print(f"\nSaving to {args.output}...")
+    shuffled_data.to_csv(args.output, index=False)
     
     # Print summary
     print("\nLabel distribution in final dataset:")
     print(shuffled_data['condition'].value_counts())
     
     print("\nPreview of combined dataset:")
-    preview_cols = ['timestamp', 'accel_x_mean', 'accel_y_mean', 'accel_z_mean', 'label', 'condition']
+    # Update preview columns to show relevant features
+    preview_cols = [
+        'accel_x_acf_lag1',
+        'accel_x_mean',
+        'accel_x_std',
+        'gyro_x_acf_lag1',
+        'gyro_x_mean',
+        'gyro_x_std',
+        'label',
+        'condition'
+    ]
     print(shuffled_data[preview_cols].head())
     
-    print(f"\nSuccessfully created {output_file}")
+    print(f"\nSuccessfully created {args.output}")
     return 0
 
 if __name__ == "__main__":
