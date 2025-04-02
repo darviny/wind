@@ -9,7 +9,7 @@ Usage:
     python main.py --model-type hybrid # Run with hybrid detection (SVM+RF)
     
 Options:
-    --no-sms                          # Disable SMS alerts
+    --no-sms                          # Disable kjdSMS alerts
     --svm-model PATH                  # Path to SVM model file (default: svm_model.pkl)
     --rf-model PATH                   # Path to RF model file (default: rf_model.pkl)
     
@@ -362,17 +362,93 @@ class SensorBuffer:
             self.process_window()
             self.reset_buffer()
         return window_ready
-
-def load_model(model_path='model.pkl'):
-    """Load the trained Random Forest model."""
-    try:
-        print(f"Loading model from {model_path}...")
-        model_dict = joblib.load(model_path)
-        return model_dict['model'], model_dict['features']
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return None, None
-
+    
+    def process_window(self):
+        """Process the current window of data."""
+        # This method was missing in the original code
+        # Implement processing logic here - currently it just logs
+        print(f"Processing window with {len(self.timestamps)} samples")
+        # If needed, you can save data or perform calculations here
+    
+    def process_remaining_data(self):
+        """Process any remaining data in the buffer."""
+        if len(self.timestamps) > 0:
+            print(f"Processing remaining {len(self.timestamps)} samples")
+            self.process_window()
+            self.reset_buffer()
+    
+    def compute_statistics(self):
+        """Compute statistical features from the current buffer."""
+        import numpy as np
+        from scipy import stats as scipy_stats
+        
+        result = {}
+        
+        # Process acceleration data
+        for axis, data in [('x', self.accel_x), ('y', self.accel_y), ('z', self.accel_z)]:
+            if not data:
+                continue
+                
+            # Basic statistics
+            result[f'accel_{axis}_mean'] = np.mean(data)
+            result[f'accel_{axis}_std'] = np.std(data)
+            result[f'accel_{axis}_min'] = np.min(data)
+            result[f'accel_{axis}_max'] = np.max(data)
+            result[f'accel_{axis}_median'] = np.median(data)
+            
+            # Skewness and kurtosis
+            result[f'accel_{axis}_skew'] = scipy_stats.skew(data) if len(data) > 2 else 0
+            result[f'accel_{axis}_kurtosis'] = scipy_stats.kurtosis(data) if len(data) > 3 else 0
+            
+            # Range and interquartile range
+            result[f'accel_{axis}_range'] = np.max(data) - np.min(data)
+            q75, q25 = np.percentile(data, [75, 25])
+            result[f'accel_{axis}_iqr'] = q75 - q25
+        
+        # Process gyroscope data
+        for axis, data in [('x', self.gyro_x), ('y', self.gyro_y), ('z', self.gyro_z)]:
+            if not data:
+                continue
+                
+            # Basic statistics
+            result[f'gyro_{axis}_mean'] = np.mean(data)
+            result[f'gyro_{axis}_std'] = np.std(data)
+            result[f'gyro_{axis}_min'] = np.min(data)
+            result[f'gyro_{axis}_max'] = np.max(data)
+            result[f'gyro_{axis}_median'] = np.median(data)
+            
+            # Skewness and kurtosis
+            result[f'gyro_{axis}_skew'] = scipy_stats.skew(data) if len(data) > 2 else 0
+            result[f'gyro_{axis}_kurtosis'] = scipy_stats.kurtosis(data) if len(data) > 3 else 0
+            
+            # Range and interquartile range
+            result[f'gyro_{axis}_range'] = np.max(data) - np.min(data)
+            q75, q25 = np.percentile(data, [75, 25])
+            result[f'gyro_{axis}_iqr'] = q75 - q25
+        
+        return result
+    
+    def compute_acf(self, data_type, nlags=4):
+        """Compute autocorrelation function for the specified data type."""
+        import numpy as np
+        from statsmodels.tsa.stattools import acf
+        
+        # Get the appropriate data array based on data_type
+        data_array = getattr(self, data_type) if hasattr(self, data_type) else []
+        
+        if len(data_array) <= 1:
+            # Not enough data points for ACF
+            return [0] * nlags
+        
+        try:
+            # Calculate ACF
+            acf_values = acf(data_array, nlags=nlags, fft=False)
+            # Remove the first value (lag 0, always 1.0)
+            acf_values = acf_values[1:]
+            return acf_values
+        except Exception as e:
+            print(f"Error computing ACF for {data_type}: {e}")
+            return [0] * nlags
 class TurbineAnomalyDetector:
     def __init__(self, model_path='model.pkl'):
         self.model, self.features = load_model(model_path)
