@@ -3,10 +3,23 @@
 main.py - Main script for MPU6050 sensor monitoring system.
 
 Usage:
-    python main.py                     # Run with all alerts enabled
-    python main.py --no-sms           # Run without SMS alerts
-    python main.py train              # Run in training mode
-    python main.py train --no-sms     # Run in training mode without SMS
+    python main.py                     # Run with Random Forest model (default)
+    python main.py --model-type rf     # Run with Random Forest model
+    python main.py --model-type svm    # Run with One-Class SVM model
+    python main.py --model-type hybrid # Run with hybrid detection (SVM+RF)
+    
+Options:
+    --no-sms                          # Disable SMS alerts
+    --svm-model PATH                  # Path to SVM model file (default: svm_model.pkl)
+    --rf-model PATH                   # Path to RF model file (default: rf_model.pkl)
+    
+Modes:
+    detect (default)                  # Run in detection mode
+    train                            # Run in training mode
+    
+Examples:
+    python main.py --model-type hybrid --svm-model custom_svm.pkl --rf-model custom_rf.pkl
+    python main.py train --no-sms
 """
 
 import time
