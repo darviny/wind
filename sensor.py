@@ -57,11 +57,11 @@ class SensorBuffer:
         window_complete = (timestamp - self.start_time).total_seconds() >= self.window_size
         
         if window_complete and len(self.accel_x) >= self.samples_needed:
-            features = self._process_window()
+            self._process_window()
             self.start_time = timestamp
-            return features
+            return True
         
-        return None
+        return False
 
     def _process_window(self):
         if len(self.accel_x) < self.samples_needed:

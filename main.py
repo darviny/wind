@@ -186,15 +186,17 @@ def main():
             
             # Check for anomalies
             if buffer.add_reading(sensor_data, timestamp):
-                is_anomaly = check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data)
-                
-                if is_anomaly:
-                    if lcd:
-                        lcd.display_alert("ANOMALY DETECTED!")
+                features = anomaly_detector.extract_features(buffer)
+                if features is not None:
+                    is_anomaly = check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data)
                     
-                    if alerts_enabled:
-                        alert_message = format_alert(sensor_data=sensor_data)
-                        sms_alert.send_sms_alert('+17782383531', alert_message)
+                    if is_anomaly:
+                        if lcd:
+                            lcd.display_alert("ANOMALY DETECTED!")
+                        
+                        if alerts_enabled:
+                            alert_message = format_alert(sensor_data=sensor_data)
+                            sms_alert.send_sms_alert('+17782383531', alert_message)
             
             time.sleep(0.2)  # 5 Hz
     except KeyboardInterrupt:
