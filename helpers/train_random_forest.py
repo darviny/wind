@@ -91,12 +91,14 @@ def train_and_save_model(X, y, feature_cols, output_file):
     print(importances)
     
     # Save model, features, scaler, and feature importance
-    joblib.dump({
+    model_dict = {
         'model': model,
-        'features': feature_cols,
+        'feature_names': feature_cols,
         'scaler': scaler,
+        'scaler_feature_names': feature_cols,
         'feature_importance': importances.to_dict()
-    }, output_file)
+    }
+    joblib.dump(model_dict, output_file)
     
     print("\nSaved model and features to " + output_file)
     return accuracy
