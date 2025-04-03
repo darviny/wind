@@ -172,6 +172,8 @@ class RandomForestDetector:
     def __init__(self, model_path):
         try:
             model_data = joblib.load(model_path)
+            print(f"Loaded model data keys: {model_data.keys() if isinstance(model_data, dict) else 'Not a dictionary'}")
+            
             if isinstance(model_data, dict):
                 self.model = model_data['model']
                 self.feature_names = model_data.get('feature_names', [])
@@ -179,6 +181,7 @@ class RandomForestDetector:
                 self.scaler_feature_names = model_data.get('scaler_feature_names', [])
                 print("Loaded Random Forest model from dictionary")
                 print(f"Feature names: {self.feature_names}")
+                print(f"Scaler feature names: {self.scaler_feature_names}")
             else:
                 self.model = model_data
                 self.feature_names = []
@@ -199,6 +202,7 @@ class RandomForestDetector:
             
         # Ensure features are in the correct order
         feature_vector = np.array(features)
+        print(f"Input features shape: {feature_vector.shape}")
         
         # Scale features using the saved scaler
         if self.scaler is not None:
@@ -206,11 +210,19 @@ class RandomForestDetector:
                 # Convert features to DataFrame with feature names if available
                 if self.scaler_feature_names:
                     import pandas as pd
-                    print(f"Using feature names: {self.scaler_feature_names}")
-                    features_df = pd.DataFrame(feature_vector.reshape(1, -1), columns=self.scaler_feature_names)
-                    feature_vector = self.scaler.transform(features_df)
+                    print(f"Using scaler feature names: {self.scaler_feature_names}")
+                    print(f"Number of feature names: {len(self.scaler_feature_names)}")
+                    print(f"Number of features: {len(feature_vector)}")
+                    
+                    if len(self.scaler_feature_names) != len(feature_vector):
+                        print("Warning: Number of feature names doesn't match number of features")
+                        print("Using direct transformation instead")
+                        feature_vector = self.scaler.transform(feature_vector.reshape(1, -1))
+                    else:
+                        features_df = pd.DataFrame(feature_vector.reshape(1, -1), columns=self.scaler_feature_names)
+                        feature_vector = self.scaler.transform(features_df)
                 else:
-                    print("No feature names available, using direct transformation")
+                    print("No scaler feature names available, using direct transformation")
                     feature_vector = self.scaler.transform(feature_vector.reshape(1, -1))
             except Exception as e:
                 print(f"Error in scaling: {e}")
