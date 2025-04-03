@@ -66,8 +66,13 @@ def extract_features(buffer):
 class OneClassSVMDetector:
     def __init__(self, model_path='models/model.pkl', scaler_path='models/scaler.pkl'):
         try:
-            self.model = joblib.load(model_path)
-            print(f"Successfully loaded model from {model_path}")
+            model_data = joblib.load(model_path)
+            if isinstance(model_data, dict):
+                self.model = model_data['model']
+                print("Loaded model from dictionary")
+            else:
+                self.model = model_data
+                print("Loaded model directly")
             print(f"Model type: {type(self.model)}")
         except Exception as e:
             print(f"Error loading model: {e}")
@@ -104,12 +109,29 @@ class OneClassSVMDetector:
 
 class RandomForestDetector:
     def __init__(self, model_path):
-        model_data = joblib.load(model_path)
-        self.model = model_data['model']
-        self.feature_cols = model_data['features']
-        self.scaler = model_data.get('scaler')  # Get scaler from saved model data
+        try:
+            model_data = joblib.load(model_path)
+            if isinstance(model_data, dict):
+                self.model = model_data['model']
+                self.feature_cols = model_data.get('features', [])
+                self.scaler = model_data.get('scaler')
+                print("Loaded Random Forest model from dictionary")
+            else:
+                self.model = model_data
+                self.feature_cols = []
+                self.scaler = None
+                print("Loaded Random Forest model directly")
+            print(f"Model type: {type(self.model)}")
+        except Exception as e:
+            print(f"Error loading Random Forest model: {e}")
+            self.model = None
+            self.feature_cols = []
+            self.scaler = None
         
     def predict(self, features):
+        if features is None or self.model is None:
+            return 0
+            
         # Ensure features are in the correct order
         feature_vector = np.array(features)
         
@@ -117,6 +139,10 @@ class RandomForestDetector:
         if self.scaler is not None:
             feature_vector = self.scaler.transform(feature_vector.reshape(1, -1))
         
-        # Make prediction and convert to integer
-        prediction = self.model.predict(feature_vector)
-        return int(prediction[0])
+        try:
+            # Make prediction and convert to integer
+            prediction = self.model.predict(feature_vector)
+            return int(prediction[0])
+        except Exception as e:
+            print(f"Error in Random Forest prediction: {e}")
+            return 0
