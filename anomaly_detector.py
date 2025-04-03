@@ -64,7 +64,7 @@ def extract_features(buffer):
     return features
 
 class OneClassSVMDetector:
-    def __init__(self, model_path='models/model.pkl', scaler_path='models/scaler.pkl'):
+    def __init__(self, model_path='models/model.pkl', scaler_path='models/scaler.pkl', sensitivity=0.5):
         try:
             model_data = joblib.load(model_path)
             if isinstance(model_data, dict):
@@ -74,6 +74,10 @@ class OneClassSVMDetector:
                 self.model = model_data
                 print("Loaded model directly")
             print(f"Model type: {type(self.model)}")
+            
+            # Set sensitivity (0.0 to 1.0, higher = less sensitive)
+            self.sensitivity = max(0.0, min(1.0, sensitivity))
+            print(f"SVM sensitivity set to {self.sensitivity}")
         except Exception as e:
             print(f"Error loading model: {e}")
             self.model = None
@@ -97,12 +101,26 @@ class OneClassSVMDetector:
             # Try to use decision_function if available
             if hasattr(self.model, 'decision_function'):
                 score = self.model.decision_function(features)[0]
+                print(f"Raw SVM score: {score}")
+                
+                # Normalize the score to be between -1 and 1
+                # The decision_function returns signed distance to the separating hyperplane
+                # Negative values indicate anomalies, positive values indicate normal samples
+                normalized_score = score / np.abs(score) if score != 0 else 0
+                print(f"Normalized SVM score: {normalized_score}")
+                
+                # Adjust threshold based on sensitivity
+                # Higher sensitivity means we need a more negative score to detect anomaly
+                threshold = -self.sensitivity
+                print(f"Threshold: {threshold}")
+                
+                # Return the normalized score shifted by the threshold
+                return float(normalized_score - threshold)
             else:
                 # If no decision_function, use predict and return -1 for anomalies
                 pred = self.model.predict(features)[0]
                 score = -1.0 if pred == -1 else 1.0
-                
-            return float(score)
+                return float(score)
         except Exception as e:
             print(f"Error in prediction: {e}")
             return 0.0

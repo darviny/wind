@@ -107,17 +107,23 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
     return False
 
 def main():
-    # Arguments
-    model = 'svm'
-    alerts_enabled = False
+    # Parse command line arguments
+    if len(sys.argv) < 2:
+        print("Usage: python main.py <model_type> <alerts_enabled> [sensitivity]")
+        print("model_type: 'svm', 'rf', or 'hybrid'")
+        print("alerts_enabled: 'true' or 'false'")
+        print("sensitivity: float between 0.0 and 1.0 (default: 0.5)")
+        return
+        
+    model = sys.argv[1].lower()
+    alerts_enabled = sys.argv[2].lower() == 'true'
+    sensitivity = float(sys.argv[3]) if len(sys.argv) > 3 else 0.5
     
-    if len(sys.argv) > 1:
-        model = sys.argv[1]
-    if len(sys.argv) > 2:
-        alerts_enabled = sys.argv[2].lower() == 'true'
-    
-    lcd = None
-    buffer = None
+    if model not in ['svm', 'rf', 'hybrid']:
+        print("Invalid model type. Use 'svm', 'rf', or 'hybrid'")
+        return
+        
+    print(f"Starting with {model} model, alerts {'enabled' if alerts_enabled else 'disabled'}, sensitivity {sensitivity}")
     
     try:
         print("Starting initialization...")
@@ -125,11 +131,17 @@ def main():
         # Initialize components
         if alerts_enabled:
             print("Initializing LCD...")
-            lcd = LCDAlert()
-            lcd.display_alert("Starting...")
-            sms_alert.set_cooldown_period(5)
-            print("LCD initialized successfully")
-     
+            try:
+                lcd = LCDAlert()
+                print("LCD initialized successfully")
+                lcd.display_alert("Starting...")
+                print("LCD test message displayed")
+            except Exception as e:
+                print(f"Error initializing LCD: {e}")
+                lcd = None
+        else:
+            print("Alerts disabled, LCD not initialized")
+            
         print("Initializing I2C...")
         i2c = board.I2C()
         print("I2C initialized successfully")
@@ -144,13 +156,13 @@ def main():
         
         print("Loading anomaly detection models...")
         if model == 'hybrid':
-            svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl')
+            svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl', sensitivity=sensitivity)
             rf_detector = anomaly_detector.RandomForestDetector('models/model_rf.pkl')
         elif model == 'rf':
             svm_detector = None
             rf_detector = anomaly_detector.RandomForestDetector('models/model_rf.pkl')
         else:  # svm mode
-            svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl')
+            svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl', sensitivity=sensitivity)
             rf_detector = None
         print("Anomaly detection models loaded successfully")
         
