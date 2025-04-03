@@ -33,6 +33,12 @@ def format_alert(anomaly_type=None, svm_score=None, confidence=None, sensor_data
 
 def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
     if model == 'hybrid':
+        # Get the latest window of data
+        window = buffer.get_latest_window()
+        if window is None:
+            print("No window data available")
+            return False
+            
         # Extract features using the function from anomaly_detector.py
         features = anomaly_detector.extract_features(buffer)
         if features is None:
@@ -62,6 +68,12 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             print("SVM did not detect anomaly")
             
     elif model == 'rf':
+        # Get the latest window of data
+        window = buffer.get_latest_window()
+        if window is None:
+            print("No window data available")
+            return False
+            
         # Extract features using the function from anomaly_detector.py
         features = anomaly_detector.extract_features(buffer)
         if features is None:
@@ -86,6 +98,12 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             print(f"RF confidence {confidence}% below threshold of 70%")
         
     else:  # svm mode
+        # Get the latest window of data
+        window = buffer.get_latest_window()
+        if window is None:
+            print("No window data available")
+            return False
+            
         # Extract features using the function from anomaly_detector.py
         features = anomaly_detector.extract_features(buffer)
         if features is None:

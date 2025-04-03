@@ -61,8 +61,18 @@ class SensorBuffer:
         
         if window_complete and len(self.accel_x) >= self.samples_needed:
             print("Window complete, processing...")
-            features = self._process_window()
+            window, features = self._process_window()
             self.start_time = timestamp
+            
+            # Only clear buffers after successful processing
+            if features is not None:
+                self.accel_x = []
+                self.accel_y = []
+                self.accel_z = []
+                self.gyro_x = []
+                self.gyro_y = []
+                self.gyro_z = []
+            
             return features is not None
         
         return False
@@ -70,7 +80,7 @@ class SensorBuffer:
     def _process_window(self):
         if len(self.accel_x) < self.samples_needed:
             print(f"Not enough samples in _process_window. Need {self.samples_needed}, have {len(self.accel_x)}")
-            return None
+            return None, None
             
         print("Processing window with data:")
         print(f"Accel X: {self.accel_x}")
@@ -118,20 +128,12 @@ class SensorBuffer:
             features = np.array(features)
             print(f"Successfully processed window. Total features: {len(features)}")
             
-            # Only clear buffers after successful processing
-            self.accel_x = []
-            self.accel_y = []
-            self.accel_z = []
-            self.gyro_x = []
-            self.gyro_y = []
-            self.gyro_z = []
-            
-            return features
+            return window, features
             
         except Exception as e:
             print(f"Error processing window: {e}")
-            return None
-            
+            return None, None
+
     def process_remaining_data(self):
         if self.accel_x:
             return self._process_window()
