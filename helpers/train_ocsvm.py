@@ -68,12 +68,33 @@ def train_model(X, nu=0.05):
     return model, scaler
 
 def save_model(model, scaler, filepath='../models/model_svm.pkl'):
+    # Get feature names from the training data
+    feature_names = []
+    for sensor in ['accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z']:
+        # Statistical features
+        feature_names.extend([
+            sensor + '_mean',
+            sensor + '_std',
+            sensor + '_max',
+            sensor + '_min',
+            sensor + '_median',
+            sensor + '_q1',
+            sensor + '_q3',
+            sensor + '_iqr',
+            sensor + '_sum_abs',
+            sensor + '_sum_squares'
+        ])
+        # ACF features
+        for i in range(4):
+            feature_names.append(sensor + '_acf_lag' + str(i+1))
+    
     model_dict = {
         'model': model,
-        'scaler': scaler
+        'scaler': scaler,
+        'feature_names': feature_names
     }
     joblib.dump(model_dict, filepath)
-    print("\nModel and scaler saved to " + filepath)
+    print("\nModel, scaler, and feature names saved to " + filepath)
    
 def main():        
     df = load_data(sys.argv[1])
