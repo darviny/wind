@@ -40,15 +40,7 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             
         # Use SVM detector to check for anomalies
         svm_score = svm_detector.predict(features)
-        
-        # SVM Score Explanation:
-        # - Positive scores: Sample is likely "normal" (inside decision boundary)
-        # - Negative scores: Sample is likely an anomaly (outside decision boundary)
-        # - Score magnitude: Further from zero = more confident prediction
-        #   * Large positive: Very confident sample is normal
-        #   * Large negative: Very confident sample is an anomaly
-        #   * Near zero: Sample is near decision boundary (uncertain)
-        # - Threshold of 0 is used to classify samples as normal or anomalous
+        print(f"SVM score: {svm_score}")
         
         # If SVM detects an anomaly, use Random Forest to classify it
         if np.any(svm_score < 0):  # Negative score indicates anomaly
@@ -58,6 +50,7 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             # Get probability estimates
             proba = rf_detector.model.predict_proba([features])[0]
             confidence = max(proba) * 100
+            print(f"RF confidence: {confidence}%")
                 
             anomaly_name = "Tempered Blade" if anomaly_type == 1 else "Gearbox Issue"
             print(format_alert(anomaly_name, svm_score, confidence, sensor_data))
@@ -75,6 +68,7 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
         # Get probability estimates
         proba = rf_detector.model.predict_proba([features])[0]
         confidence = max(proba) * 100
+        print(f"RF confidence: {confidence}%")
         
         # If confidence is high enough, consider it an anomaly
         if confidence > 70:  # Threshold can be adjusted
@@ -90,15 +84,7 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             
         # Use SVM detector to check for anomalies
         svm_score = svm_detector.predict(features)
-        
-        # SVM Score Explanation:
-        # - Positive scores: Sample is likely "normal" (inside decision boundary)
-        # - Negative scores: Sample is likely an anomaly (outside decision boundary)
-        # - Score magnitude: Further from zero = more confident prediction
-        #   * Large positive: Very confident sample is normal
-        #   * Large negative: Very confident sample is an anomaly
-        #   * Near zero: Sample is near decision boundary (uncertain)
-        # - Threshold of 0 is used to classify samples as normal or anomalous
+        print(f"SVM score: {svm_score}")
         
         # If SVM detects an anomaly
         if np.any(svm_score < 0):  # Negative score indicates anomaly
@@ -186,17 +172,23 @@ def main():
             
             # Check for anomalies
             if buffer.add_reading(sensor_data, timestamp):
+                print("Window complete, checking for anomalies...")
                 features = anomaly_detector.extract_features(buffer)
                 if features is not None:
+                    print("Features extracted, running anomaly detection...")
                     is_anomaly = check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data)
+                    print(f"Anomaly detection result: {is_anomaly}")
                     
                     if is_anomaly:
+                        print("ANOMALY DETECTED!")
                         if lcd:
                             lcd.display_alert("ANOMALY DETECTED!")
+                            print("LCD updated with anomaly alert")
                         
                         if alerts_enabled:
                             alert_message = format_alert(sensor_data=sensor_data)
                             sms_alert.send_sms_alert('+17782383531', alert_message)
+                            print("SMS alert sent")
             
             time.sleep(0.2)  # 5 Hz
     except KeyboardInterrupt:
