@@ -34,14 +34,16 @@ def extract_features(buffer):
     
     # Extract features
     features = []
+    feature_names = []
     
     # For each sensor (accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z)
-    for i in range(6):  # 6 sensors
+    sensor_names = ['accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z']
+    for i, sensor_name in enumerate(sensor_names):
         sensor_data = data[:, i]
-        print(f"Sensor {i} data length: {len(sensor_data)}")
+        print(f"Sensor {sensor_name} data length: {len(sensor_data)}")
         
         # Add statistical features
-        features.extend([
+        stat_features = [
             np.mean(sensor_data),
             np.std(sensor_data),
             np.max(sensor_data),
@@ -52,16 +54,33 @@ def extract_features(buffer):
             np.percentile(sensor_data, 75) - np.percentile(sensor_data, 25),  # iqr
             np.sum(np.abs(sensor_data)),  # sum_abs
             np.sum(np.square(sensor_data))  # sum_squares
-        ])
+        ]
+        stat_names = [
+            f'{sensor_name}_mean',
+            f'{sensor_name}_std',
+            f'{sensor_name}_max',
+            f'{sensor_name}_min',
+            f'{sensor_name}_median',
+            f'{sensor_name}_q1',
+            f'{sensor_name}_q3',
+            f'{sensor_name}_iqr',
+            f'{sensor_name}_sum_abs',
+            f'{sensor_name}_sum_squares'
+        ]
+        features.extend(stat_features)
+        feature_names.extend(stat_names)
         
         # Add ACF features
         acf_features = compute_acf_features(sensor_data)
-        print(f"Sensor {i} ACF features: {acf_features}")
+        acf_names = [f'{sensor_name}_acf_{i+1}' for i in range(len(acf_features))]
+        print(f"Sensor {sensor_name} ACF features: {acf_features}")
         features.extend(acf_features)
+        feature_names.extend(acf_names)
     
     features = np.array(features)
     print(f"Total features extracted: {len(features)}")
-    return features
+    print(f"Feature names: {feature_names}")
+    return features, feature_names
 
 class OneClassSVMDetector:
     def __init__(self, model_path='models/model.pkl', scaler_path='models/scaler.pkl', sensitivity=0.5):
@@ -69,9 +88,11 @@ class OneClassSVMDetector:
             model_data = joblib.load(model_path)
             if isinstance(model_data, dict):
                 self.model = model_data['model']
+                self.feature_names = model_data.get('feature_names', [])
                 print("Loaded model from dictionary")
             else:
                 self.model = model_data
+                self.feature_names = []
                 print("Loaded model directly")
             print(f"Model type: {type(self.model)}")
             
@@ -83,7 +104,15 @@ class OneClassSVMDetector:
             self.model = None
             
         try:
-            self.scaler = joblib.load(scaler_path)
+            scaler_data = joblib.load(scaler_path)
+            if isinstance(scaler_data, dict):
+                self.scaler = scaler_data['scaler']
+                self.scaler_feature_names = scaler_data.get('feature_names', [])
+                print("Loaded scaler from dictionary")
+            else:
+                self.scaler = scaler_data
+                self.scaler_feature_names = []
+                print("Loaded scaler directly")
             print("Successfully loaded scaler")
         except (FileNotFoundError, IOError):
             print(f"Scaler file {scaler_path} not found. Using identity scaling.")
@@ -95,7 +124,17 @@ class OneClassSVMDetector:
             
         features = np.array(features).reshape(1, -1)
         if self.scaler is not None:
-            features = self.scaler.transform(features)
+            try:
+                # Convert features to DataFrame with feature names if available
+                if hasattr(self, 'scaler_feature_names') and self.scaler_feature_names:
+                    import pandas as pd
+                    features_df = pd.DataFrame(features, columns=self.scaler_feature_names)
+                    features = self.scaler.transform(features_df)
+                else:
+                    features = self.scaler.transform(features)
+            except Exception as e:
+                print(f"Error in scaling: {e}")
+                return 0.0
         
         try:
             # Try to use decision_function if available
@@ -131,20 +170,23 @@ class RandomForestDetector:
             model_data = joblib.load(model_path)
             if isinstance(model_data, dict):
                 self.model = model_data['model']
-                self.feature_cols = model_data.get('features', [])
+                self.feature_names = model_data.get('feature_names', [])
                 self.scaler = model_data.get('scaler')
+                self.scaler_feature_names = model_data.get('scaler_feature_names', [])
                 print("Loaded Random Forest model from dictionary")
             else:
                 self.model = model_data
-                self.feature_cols = []
+                self.feature_names = []
                 self.scaler = None
+                self.scaler_feature_names = []
                 print("Loaded Random Forest model directly")
             print(f"Model type: {type(self.model)}")
         except Exception as e:
             print(f"Error loading Random Forest model: {e}")
             self.model = None
-            self.feature_cols = []
+            self.feature_names = []
             self.scaler = None
+            self.scaler_feature_names = []
         
     def predict(self, features):
         if features is None or self.model is None:
@@ -155,7 +197,17 @@ class RandomForestDetector:
         
         # Scale features using the saved scaler
         if self.scaler is not None:
-            feature_vector = self.scaler.transform(feature_vector.reshape(1, -1))
+            try:
+                # Convert features to DataFrame with feature names if available
+                if self.scaler_feature_names:
+                    import pandas as pd
+                    features_df = pd.DataFrame(feature_vector.reshape(1, -1), columns=self.scaler_feature_names)
+                    feature_vector = self.scaler.transform(features_df)
+                else:
+                    feature_vector = self.scaler.transform(feature_vector.reshape(1, -1))
+            except Exception as e:
+                print(f"Error in scaling: {e}")
+                return 0
         
         try:
             # Make prediction and convert to integer
