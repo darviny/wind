@@ -54,9 +54,13 @@ class SensorBuffer:
         self.gyro_y.append(sensor_data['gyro_y'])
         self.gyro_z.append(sensor_data['gyro_z'])
         
+        print(f"Added reading. Buffer lengths: accel_x={len(self.accel_x)}, accel_y={len(self.accel_y)}, accel_z={len(self.accel_z)}, "
+              f"gyro_x={len(self.gyro_x)}, gyro_y={len(self.gyro_y)}, gyro_z={len(self.gyro_z)}")
+        
         window_complete = (timestamp - self.start_time).total_seconds() >= self.window_size
         
         if window_complete and len(self.accel_x) >= self.samples_needed:
+            print("Window complete, processing...")
             features = self._process_window()
             self.start_time = timestamp
             return features is not None
@@ -65,6 +69,7 @@ class SensorBuffer:
 
     def _process_window(self):
         if len(self.accel_x) < self.samples_needed:
+            print(f"Not enough samples in _process_window. Need {self.samples_needed}, have {len(self.accel_x)}")
             return None
             
         # Create numpy array from sensor data
@@ -72,9 +77,11 @@ class SensorBuffer:
         # - 6 rows (one for each sensor: accel_x,y,z and gyro_x,y,z)
         # - n_samples columns (one for each reading)
         window = np.array([
-            self.accel_x.copy(), self.accel_y.copy(), self.accel_z.copy(),
-            self.gyro_x.copy(), self.gyro_y.copy(), self.gyro_z.copy()
+            self.accel_x, self.accel_y, self.accel_z,
+            self.gyro_x, self.gyro_y, self.gyro_z
         ])
+        
+        print(f"Created window array with shape: {window.shape}")
         
         # Transpose to shape (n_samples, 6)
         # - n_samples rows (one for each reading)
@@ -94,7 +101,7 @@ class SensorBuffer:
             # Add ACF features
             features.extend(compute_acf_features(sensor_data))
         
-        # Reset buffer
+        # Only clear buffers after successfully processing the window
         self.accel_x = []
         self.accel_y = []
         self.accel_z = []
