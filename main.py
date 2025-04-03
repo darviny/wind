@@ -3,6 +3,7 @@ import time
 import sys
 import board
 import adafruit_mpu6050
+import traceback
 
 from datetime import datetime
 from lcd_alert import LCDAlert      
@@ -119,16 +120,29 @@ def main():
     buffer = None
     
     try:
+        print("Starting initialization...")
+        
         # Initialize components
         if alerts_enabled:
+            print("Initializing LCD...")
             lcd = LCDAlert()
             lcd.display_alert("Starting...")
             sms_alert.set_cooldown_period(5)
+            print("LCD initialized successfully")
      
+        print("Initializing I2C...")
         i2c = board.I2C()
-        sensor_device = adafruit_mpu6050.MPU6050(i2c)
-        buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
+        print("I2C initialized successfully")
         
+        print("Initializing MPU6050 sensor...")
+        sensor_device = adafruit_mpu6050.MPU6050(i2c)
+        print("MPU6050 sensor initialized successfully")
+        
+        print("Initializing sensor buffer...")
+        buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
+        print("Sensor buffer initialized successfully")
+        
+        print("Loading anomaly detection models...")
         if model == 'hybrid':
             svm_detector = anomaly_detector.OneClassSVMDetector('models/svm_model.pkl')
             rf_detector = anomaly_detector.RandomForestDetector('models/rf_model.pkl')
@@ -138,6 +152,7 @@ def main():
         else:  # svm mode
             svm_detector = anomaly_detector.OneClassSVMDetector('models/svm_model.pkl')
             rf_detector = None
+        print("Anomaly detection models loaded successfully")
         
         print("Components Ready")
         print(f"\nMonitoring started at 5 Hz with {model} model")
@@ -183,6 +198,9 @@ def main():
             time.sleep(0.2)  # 5 Hz
     except KeyboardInterrupt:
         print("\nStopping...")
+    except Exception as e:
+        print(f"\nError: {e}")
+        traceback.print_exc()
     finally:
         if buffer:
             buffer.process_remaining_data()
