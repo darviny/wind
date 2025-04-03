@@ -36,6 +36,7 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
         # Extract features using the function from anomaly_detector.py
         features = anomaly_detector.extract_features(buffer)
         if features is None:
+            print("No features extracted")
             return False
             
         # Use SVM detector to check for anomalies
@@ -44,8 +45,10 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
         
         # If SVM detects an anomaly, use Random Forest to classify it
         if np.any(svm_score < 0):  # Negative score indicates anomaly
+            print("SVM detected anomaly")
             # Use Random Forest to classify the anomaly type
             anomaly_type = rf_detector.predict(features)
+            print(f"RF predicted anomaly type: {anomaly_type}")
             
             # Get probability estimates
             proba = rf_detector.model.predict_proba([features])[0]
@@ -55,15 +58,19 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             anomaly_name = "Tempered Blade" if anomaly_type == 1 else "Gearbox Issue"
             print(format_alert(anomaly_name, svm_score, confidence, sensor_data))
             return True
+        else:
+            print("SVM did not detect anomaly")
             
     elif model == 'rf':
         # Extract features using the function from anomaly_detector.py
         features = anomaly_detector.extract_features(buffer)
         if features is None:
+            print("No features extracted")
             return False
             
         # Use Random Forest to classify the anomaly type
         anomaly_type = rf_detector.predict(features)
+        print(f"RF predicted anomaly type: {anomaly_type}")
         
         # Get probability estimates
         proba = rf_detector.model.predict_proba([features])[0]
@@ -75,11 +82,14 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             anomaly_name = "Tempered Blade" if anomaly_type == 1 else "Gearbox Issue"
             print(format_alert(anomaly_name, confidence=confidence, sensor_data=sensor_data))
             return True
+        else:
+            print(f"RF confidence {confidence}% below threshold of 70%")
         
     else:  # svm mode
         # Extract features using the function from anomaly_detector.py
         features = anomaly_detector.extract_features(buffer)
         if features is None:
+            print("No features extracted")
             return False
             
         # Use SVM detector to check for anomalies
@@ -88,8 +98,11 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
         
         # If SVM detects an anomaly
         if np.any(svm_score < 0):  # Negative score indicates anomaly
+            print("SVM detected anomaly")
             print(format_alert(svm_score=svm_score, sensor_data=sensor_data))
             return True
+        else:
+            print("SVM did not detect anomaly")
     
     return False
 
