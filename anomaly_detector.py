@@ -88,7 +88,7 @@ class OneClassSVMDetector:
                 # Convert features to DataFrame with feature names if available
                 if hasattr(self, 'scaler_feature_names') and self.scaler_feature_names:
                     import pandas as pd
-                    print(f"Using feature names: {self.scaler_feature_names}")
+                    print(f"Using scaler feature names: {self.scaler_feature_names}")
                     features_df = pd.DataFrame(features, columns=self.scaler_feature_names)
                     features = self.scaler.transform(features_df)
                 else:

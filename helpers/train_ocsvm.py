@@ -51,9 +51,15 @@ def extract_features(data):
 def train_and_save_model(features, feature_names, model_path, scaler_path):
     """Train One-Class SVM model and save it with feature names."""
     try:
-        # Scale features
+        # Convert features to DataFrame with feature names
+        features_df = pd.DataFrame(features.reshape(1, -1), columns=feature_names)
+        print("\nFeatures DataFrame:")
+        print(features_df)
+        
+        # Scale features using the DataFrame to preserve feature names
         scaler = StandardScaler()
-        scaled_features = scaler.fit_transform(features.reshape(1, -1))
+        scaler.fit(features_df)  # Fit on DataFrame to learn feature names
+        scaled_features = scaler.transform(features_df)
         
         # Train model
         model = OneClassSVM(nu=0.1, kernel='rbf', gamma='scale')
