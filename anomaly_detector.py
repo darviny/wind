@@ -91,5 +91,6 @@ class RandomForestDetector:
         if self.scaler is not None:
             feature_vector = self.scaler.transform(feature_vector.reshape(1, -1))
         
-        # Make prediction
-        return self.model.predict(feature_vector)[0]
+        # Make prediction and convert to integer
+        prediction = self.model.predict(feature_vector)
+        return int(prediction[0])
