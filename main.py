@@ -13,16 +13,12 @@ import sms_alert
 import anomaly_detector
 import sensor
 
-def format_alert(anomaly_type=None, svm_score=None, confidence=None, sensor_data=None):
+def format_alert(svm_score=None, sensor_data=None):
     alert = "================================================\n"
     alert += "WIND TURBINE ALERT\n"
     alert += "Time: " + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + "\n"
-    if anomaly_type:
-        alert += "Type: " + anomaly_type + "\n"
     if svm_score is not None:
         alert += "SVM Score: " + str(svm_score) + "\n"
-    if confidence is not None:
-        alert += "Confidence: " + str(confidence) + "%\n"
     if sensor_data:
         alert += "Sensor Readings:\n"
         alert += "Accel (m/s²): X=" + "{:.2f}".format(sensor_data['accel_x']) + ", Y=" + "{:.2f}".format(sensor_data['accel_y']) + ", Z=" + "{:.2f}".format(sensor_data['accel_z']) + "\n"
@@ -31,99 +27,39 @@ def format_alert(anomaly_type=None, svm_score=None, confidence=None, sensor_data
     alert += "================================================"
     return alert
 
-def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
-    if model == 'hybrid':
-        # Get the latest window of data
-        window = buffer.get_latest_window()
-        if window is None:
-            print("No window data available")
-            return False
-            
-        # Use SVM detector to check for anomalies
-        svm_score = svm_detector.predict(buffer.last_features)
-        print(f"SVM score: {svm_score}")
+def check_anomaly(buffer, svm_detector, sensor_data):
+    # Get the latest window of data
+    window = buffer.get_latest_window()
+    if window is None:
+        print("No window data available")
+        return False
         
-        # If SVM detects an anomaly, use Random Forest to classify it
-        if np.any(svm_score < 0):  # Negative score indicates anomaly
-            print("SVM detected anomaly")
-            # Use Random Forest to classify the anomaly type
-            anomaly_type = rf_detector.predict(buffer.last_features)
-            print(f"RF predicted anomaly type: {anomaly_type}")
-            
-            # Get probability estimates
-            proba = rf_detector.model.predict_proba([buffer.last_features])[0]
-            confidence = max(proba) * 100
-            print(f"RF confidence: {confidence}%")
-                
-            anomaly_name = "Tempered Blade" if anomaly_type == 1 else "Gearbox Issue"
-            print(format_alert(anomaly_name, svm_score, confidence, sensor_data))
-            return True
-        else:
-            print("SVM did not detect anomaly")
-            
-    elif model == 'rf':
-        # Get the latest window of data
-        window = buffer.get_latest_window()
-        if window is None:
-            print("No window data available")
-            return False
-            
-        # Use Random Forest to classify the anomaly type
-        anomaly_type = rf_detector.predict(buffer.last_features)
-        print(f"RF predicted anomaly type: {anomaly_type}")
-        
-        # Get probability estimates
-        proba = rf_detector.model.predict_proba([buffer.last_features])[0]
-        confidence = max(proba) * 100
-        print(f"RF confidence: {confidence}%")
-        
-        # If confidence is high enough, consider it an anomaly
-        if confidence > 70:  # Threshold can be adjusted
-            anomaly_name = "Tempered Blade" if anomaly_type == 1 else "Gearbox Issue"
-            print(format_alert(anomaly_name, confidence=confidence, sensor_data=sensor_data))
-            return True
-        else:
-            print(f"RF confidence {confidence}% below threshold of 70%")
-        
-    else:  # svm mode
-        # Get the latest window of data
-        window = buffer.get_latest_window()
-        if window is None:
-            print("No window data available")
-            return False
-            
-        # Use SVM detector to check for anomalies
-        svm_score = svm_detector.predict(buffer.last_features)
-        print(f"SVM score: {svm_score}")
-        
-        # If SVM detects an anomaly
-        if np.any(svm_score < 0):  # Negative score indicates anomaly
-            print("SVM detected anomaly")
-            print(format_alert(svm_score=svm_score, sensor_data=sensor_data))
-            return True
-        else:
-            print("SVM did not detect anomaly")
+    # Use SVM detector to check for anomalies
+    svm_score = svm_detector.predict(buffer.last_features)
+    print(f"SVM score: {svm_score}")
+    
+    # If SVM detects an anomaly
+    if np.any(svm_score < 0):  # Negative score indicates anomaly
+        print("SVM detected anomaly")
+        print(format_alert(svm_score=svm_score, sensor_data=sensor_data))
+        return True
+    else:
+        print("SVM did not detect anomaly")
     
     return False
 
 def main():
     # Parse command line arguments
     if len(sys.argv) < 2:
-        print("Usage: python main.py <model_type> <alerts_enabled> [sensitivity]")
-        print("model_type: 'svm', 'rf', or 'hybrid'")
+        print("Usage: python main.py <alerts_enabled> [sensitivity]")
         print("alerts_enabled: 'true' or 'false'")
         print("sensitivity: float between 0.0 and 1.0 (default: 0.5)")
         return
         
-    model = sys.argv[1].lower()
-    alerts_enabled = sys.argv[2].lower() == 'true'
-    sensitivity = float(sys.argv[3]) if len(sys.argv) > 3 else 0.5
+    alerts_enabled = sys.argv[1].lower() == 'true'
+    sensitivity = float(sys.argv[2]) if len(sys.argv) > 2 else 0.5
     
-    if model not in ['svm', 'rf', 'hybrid']:
-        print("Invalid model type. Use 'svm', 'rf', or 'hybrid'")
-        return
-        
-    print(f"Starting with {model} model, alerts {'enabled' if alerts_enabled else 'disabled'}, sensitivity {sensitivity}")
+    print(f"Starting with alerts {'enabled' if alerts_enabled else 'disabled'}, sensitivity {sensitivity}")
     
     try:
         print("Starting initialization...")
@@ -154,20 +90,12 @@ def main():
         buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
         print("Sensor buffer initialized successfully")
         
-        print("Loading anomaly detection models...")
-        if model == 'hybrid':
-            svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl', sensitivity=sensitivity)
-            rf_detector = anomaly_detector.RandomForestDetector('models/model_rf.pkl')
-        elif model == 'rf':
-            svm_detector = None
-            rf_detector = anomaly_detector.RandomForestDetector('models/model_rf.pkl')
-        else:  # svm mode
-            svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl', sensitivity=sensitivity)
-            rf_detector = None
-        print("Anomaly detection models loaded successfully")
+        print("Loading anomaly detection model...")
+        svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl', sensitivity=sensitivity)
+        print("Anomaly detection model loaded successfully")
         
         print("Components Ready")
-        print(f"\nMonitoring started at 5 Hz with {model} model")
+        print("\nMonitoring started at 5 Hz")
         print("Press Ctrl+C to stop")
         
         while True:
@@ -201,7 +129,7 @@ def main():
                 features = anomaly_detector.extract_features(buffer)
                 if features is not None:
                     print("Features extracted, running anomaly detection...")
-                    is_anomaly = check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data)
+                    is_anomaly = check_anomaly(buffer, svm_detector, sensor_data)
                     print(f"Anomaly detection result: {is_anomaly}")
                     
                     if is_anomaly:
@@ -224,7 +152,6 @@ def main():
     finally:
         if buffer:
             buffer.process_remaining_data()
-
         
         print("\nMonitoring complete")
         return 0

@@ -5,103 +5,100 @@ Usage:
 """
 import joblib
 import sys
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import OneClassSVM
 
-def load_data(filepath):
-    print("Loading data from " + filepath + "...")
-    df = pd.read_csv(filepath)
-    
-    # Handle missing values
-    initial_rows = len(df)
-    df = df.dropna()
-    rows_dropped = initial_rows - len(df)
-    if rows_dropped > 0:
-        print("\nDropped " + str(rows_dropped) + " rows with missing values")
-    
-    return df
-        
-def select_features(df):
-    # Define feature names for each sensor
-    sensor_features = []
-    for sensor in ['accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z']:
-        # Statistical features
-        sensor_features.extend([
-            sensor + '_mean',
-            sensor + '_std',
-            sensor + '_max',
-            sensor + '_min',
-            sensor + '_median',
-            sensor + '_q1',
-            sensor + '_q3',
-            sensor + '_iqr',
-            sensor + '_sum_abs',
-            sensor + '_sum_squares'
-        ])
-        # ACF features
-        for i in range(4):
-            sensor_features.append(sensor + '_acf_lag' + str(i+1))
-    
-    X = df[sensor_features]
-    return X
+def load_data(file_path):
+    """Load sensor data from CSV file."""
+    try:
+        data = pd.read_csv(file_path)
+        print(f"Loaded data shape: {data.shape}")
+        print("\nFirst 5 rows:")
+        print(data.head())
+        return data
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        sys.exit(1)
 
-def train_model(X, nu=0.05):
-    # Standardize the features to have zero mean and unit variance
-    # This is important for SVM models which are sensitive to the scale of features
-    print("\nStandardizing features...")
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
-    # Train a One-Class SVM model for anomaly detection
-    # - nu: Controls the proportion of outliers expected in the training data
-    #   (higher values = more outliers allowed = more sensitive to anomalies)
-    print("\nTraining One-Class SVM (nu=" + str(nu) + ")...")
-    model = OneClassSVM(
-        kernel='rbf',  # Radial Basis Function kernel for non-linear decision boundaries
-        gamma='auto',  # Kernel coefficient - 'auto' uses 1/n_features
-        nu=nu          # Expected proportion of outliers in the training data
-    )
-    model.fit(X_scaled)  # Train the model on the standardized features
-    
-    print("Training completed on " + str(len(X)) + " samples")    
-    return model, scaler
-
-def save_model(model, scaler, filepath='../models/model_svm.pkl'):
-    # Get feature names from the training data
+def extract_features(data):
+    """Extract features from the pre-computed features file."""
+    # The features file already contains the mean and std for each sensor
+    # We just need to get the values in the correct order
+    features = []
     feature_names = []
-    for sensor in ['accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z']:
-        # Statistical features
-        feature_names.extend([
-            sensor + '_mean',
-            sensor + '_std',
-            sensor + '_max',
-            sensor + '_min',
-            sensor + '_median',
-            sensor + '_q1',
-            sensor + '_q3',
-            sensor + '_iqr',
-            sensor + '_sum_abs',
-            sensor + '_sum_squares'
-        ])
-        # ACF features
-        for i in range(4):
-            feature_names.append(sensor + '_acf_lag' + str(i+1))
     
-    model_dict = {
-        'model': model,
-        'scaler': scaler,
-        'feature_names': feature_names
-    }
-    joblib.dump(model_dict, filepath)
-    print("\nModel, scaler, and feature names saved to " + filepath)
-   
-def main():        
-    df = load_data(sys.argv[1])
-    X = select_features(df)
-    model, scaler = train_model(X, nu=0.05)
-    save_model(model, scaler)
-    print("\nTraining completed successfully!")
+    # Sensor names and their corresponding feature suffixes
+    sensors = ['accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z']
+    suffixes = ['_mean', '_std']
+    
+    # Extract features in the correct order
+    for sensor in sensors:
+        for suffix in suffixes:
+            col_name = sensor + suffix
+            if col_name in data.columns:
+                features.append(data[col_name].values[0])  # Get the first row's value
+                feature_names.append(col_name)
+            else:
+                print(f"Warning: Column {col_name} not found in data")
+    
+    features = np.array(features)
+    print(f"Total features extracted: {len(features)}")
+    print(f"Feature names: {feature_names}")
+    return features, feature_names
+
+def train_and_save_model(features, feature_names, model_path, scaler_path):
+    """Train One-Class SVM model and save it with feature names."""
+    try:
+        # Scale features
+        scaler = StandardScaler()
+        scaled_features = scaler.fit_transform(features.reshape(1, -1))
+        
+        # Train model
+        model = OneClassSVM(nu=0.1, kernel='rbf', gamma='scale')
+        model.fit(scaled_features)
+        
+        # Save model with feature names
+        model_data = {
+            'model': model,
+            'feature_names': feature_names
+        }
+        joblib.dump(model_data, model_path)
+        print(f"Model saved to {model_path}")
+        
+        # Save scaler with feature names
+        scaler_data = {
+            'scaler': scaler,
+            'feature_names': feature_names
+        }
+        joblib.dump(scaler_data, scaler_path)
+        print(f"Scaler saved to {scaler_path}")
+        
+    except Exception as e:
+        print(f"Error in training/saving: {e}")
+        sys.exit(1)
+
+def main():
+    if len(sys.argv) != 3:
+        print("Usage: python train_ocsvm.py <input_csv> <output_model>")
+        sys.exit(1)
+        
+    input_file = sys.argv[1]
+    output_model = sys.argv[2]
+    output_scaler = output_model.replace('model_svm.pkl', 'scaler.pkl')
+    
+    print(f"Input file: {input_file}")
+    print(f"Output model: {output_model}")
+    print(f"Output scaler: {output_scaler}")
+    
+    # Load and process data
+    data = load_data(input_file)
+    features, feature_names = extract_features(data)
+    
+    # Train and save model
+    train_and_save_model(features, feature_names, output_model, output_scaler)
+    print("Training completed successfully!")
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    main() 

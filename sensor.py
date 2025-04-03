@@ -2,7 +2,6 @@ from datetime import datetime
 import numpy as np
 import csv
 import os
-from helpers.extract_acf_features import compute_acf_features, compute_aggregate_features
 
 
 def log_sensor_data_to_csv(sensor_data, timestamp=None, filename='data/sensor_data.csv'):
@@ -97,9 +96,6 @@ class SensorBuffer:
         print(f"Gyro Z: {self.gyro_z}")
             
         # Create numpy array from sensor data
-        # Shape before transpose: (6, n_samples)
-        # - 6 rows (one for each sensor: accel_x,y,z and gyro_x,y,z)
-        # - n_samples columns (one for each reading)
         window = np.array([
             self.accel_x, self.accel_y, self.accel_z,
             self.gyro_x, self.gyro_y, self.gyro_z
@@ -108,8 +104,6 @@ class SensorBuffer:
         print(f"Created window array with shape: {window.shape}")
         
         # Transpose to shape (n_samples, 6)
-        # - n_samples rows (one for each reading)
-        # - 6 columns (one for each sensor)
         window = window.T
         
         # Initialize features list
@@ -121,15 +115,11 @@ class SensorBuffer:
                 sensor_data = window[:, i]
                 print(f"Processing sensor {i} with data: {sensor_data}")
                 
-                # Add statistical features
-                stats_features = compute_aggregate_features(sensor_data)
-                print(f"Statistical features for sensor {i}: {stats_features}")
-                features.extend(stats_features)
-                
-                # Add ACF features
-                acf_features = compute_acf_features(sensor_data)
-                print(f"ACF features for sensor {i}: {acf_features}")
-                features.extend(acf_features)
+                # Only compute mean and standard deviation
+                features.extend([
+                    np.mean(sensor_data),  # mean
+                    np.std(sensor_data)    # std
+                ])
             
             features = np.array(features)
             print(f"Successfully processed window. Total features: {len(features)}")

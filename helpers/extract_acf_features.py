@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
-extract_acf_features.py - Extract both autocorrelation and statistical features 
-from vibration sensor data using sliding windows.
+extract_acf_features.py - Extract basic statistical features from vibration sensor data.
 
 This script processes time-series sensor data and computes:
-- Autocorrelation features (first 4 lags)
-- Statistical features (mean, std, min, max, median, range)
+- Mean and standard deviation for each sensor
 using overlapping windows with 50% overlap.
 
 USAGE:
@@ -34,8 +32,8 @@ INPUT FORMAT:
 OUTPUT FORMAT:
     The output CSV will contain features for each window:
     - For each sensor (accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z):
-        - Statistical features: mean, std, max, min, median, q1, q3, iqr, sum_abs, sum_squares
-        - ACF features: acf_lag1, acf_lag2, acf_lag3, acf_lag4
+        - mean: Average value
+        - std: Standard deviation
 """
 
 import pandas as pd
@@ -103,68 +101,31 @@ def generate_windows(data: np.ndarray,
     for start in range(0, n_samples - window_size + 1, step_size):
         yield data[start:start + window_size]
 
-def compute_acf_features(signal: np.ndarray, n_lags: int = 4) -> List[float]:
+def compute_basic_features(signal: np.ndarray) -> List[float]:
     """
-    Compute autocorrelation features for a signal.
-    
-    Args:
-        signal: Input signal array
-        n_lags: Number of ACF lags to use as features
-    
-    Returns:
-        List of ACF features
-    """
-    # Remove mean
-    signal = signal - np.mean(signal)
-    
-    # Compute autocorrelation
-    acf = np.correlate(signal, signal, mode='full')
-    
-    # Keep only positive lags
-    acf = acf[len(signal)-1:]
-    
-    # Normalize by zero lag
-    if acf[0] > 0:
-        acf = acf / acf[0]
-    
-    # Return first n_lags
-    return acf[1:n_lags+1].tolist()
-
-def compute_aggregate_features(signal: np.ndarray) -> List[float]:
-    """
-    Compute statistical features for a signal.
+    Compute basic statistical features for a signal.
     
     Args:
         signal: Input signal array
     
     Returns:
-        List of statistical features
+        List of basic features (mean, std)
     """
     return [
-        np.mean(signal),
-        np.std(signal),
-        np.max(signal),
-        np.min(signal),
-        np.median(signal),
-        np.percentile(signal, 25),  # q1
-        np.percentile(signal, 75),  # q3
-        np.percentile(signal, 75) - np.percentile(signal, 25),  # iqr
-        np.sum(np.abs(signal)),  # sum_abs
-        np.sum(signal ** 2)  # sum_squares
+        np.mean(signal),  # mean
+        np.std(signal)    # std
     ]
 
 def process_data(data: pd.DataFrame, 
                 fs: int, 
-                buffer_seconds: int, 
-                n_lags: int = 4) -> pd.DataFrame:
+                buffer_seconds: int) -> pd.DataFrame:
     """
-    Process sensor data and extract both ACF and statistical features.
+    Process sensor data and extract basic statistical features.
     
     Args:
         data: Input DataFrame with sensor readings
         fs: Sampling frequency in Hz
         buffer_seconds: Window size in seconds
-        n_lags: Number of ACF lags to use as features
     
     Returns:
         DataFrame containing all computed features
@@ -180,7 +141,6 @@ def process_data(data: pd.DataFrame,
     print("Sampling rate: " + str(fs) + " Hz")
     print("Window size: " + str(window_size) + " samples (" + str(buffer_seconds) + " seconds)")
     print("Step size: " + str(step_size) + " samples (50% overlap)")
-    print("ACF lags per sensor: " + str(n_lags))
     
     # Process windows
     all_features = []
@@ -194,11 +154,8 @@ def process_data(data: pd.DataFrame,
         for i in range(6):  # 6 sensors
             sensor_data = window[:, i]
             
-            # Add statistical features
-            window_features.extend(compute_aggregate_features(sensor_data))
-            
-            # Add ACF features
-            window_features.extend(compute_acf_features(sensor_data, n_lags))
+            # Add basic features
+            window_features.extend(compute_basic_features(sensor_data))
         
         all_features.append(window_features)
         
@@ -211,22 +168,10 @@ def process_data(data: pd.DataFrame,
     # Create column names for the features
     feature_names = []
     for sensor in ['accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z']:
-        # Statistical features
         feature_names.extend([
             sensor + '_mean',
-            sensor + '_std',
-            sensor + '_max',
-            sensor + '_min',
-            sensor + '_median',
-            sensor + '_q1',
-            sensor + '_q3',
-            sensor + '_iqr',
-            sensor + '_sum_abs',
-            sensor + '_sum_squares'
+            sensor + '_std'
         ])
-        # ACF features
-        for i in range(n_lags):
-            feature_names.append(sensor + '_acf_lag' + str(i+1))
     
     # Convert to DataFrame
     feature_df = pd.DataFrame(all_features, columns=feature_names)
@@ -242,7 +187,7 @@ def process_data(data: pd.DataFrame,
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(
-        description="Extract ACF and statistical features from sensor data",
+        description="Extract basic statistical features from sensor data",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
