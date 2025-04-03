@@ -1,1 +1,6 @@
-adafruit-circuitpython-adxl34x
+numpy>=1.21.0
+scipy>=1.7.0
+statsmodels>=0.13.0
+adafruit-circuitpython-mpu6050>=2.2.0
+joblib>=1.1.0
+scikit-learn>=1.0.0

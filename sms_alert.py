@@ -1,148 +1,40 @@
 #!/usr/bin/env python3
-"""
-sms_alert.py - SMS alerting module using Twilio API with cooldown period.
-
-Environment variables can be set in a .env file:
-    TWILIO_ACCOUNT_SID=your_account_sid
-    TWILIO_AUTH_TOKEN=your_auth_token
-    TWILIO_FROM_PHONE=+1234567890
-"""
-
 import os
 import time
-import logging
-from typing import Optional
-from dotenv import load_dotenv
 from twilio.rest import Client
-from twilio.base.exceptions import TwilioRestException
 
-# Load environment variables from .env file
-load_dotenv()
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+TWILIO_FROM_PHONE = os.getenv('TWILIO_FROM_PHONE')
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Track last alert time for cooldown
-last_alert_time = 0
 COOLDOWN_PERIOD = 10  # seconds
+last_alert_time = None
 
-def get_twilio_client() -> Optional[Client]:
-    """Initialize Twilio client using credentials from .env file."""
-    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
-    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
-    
-    if not account_sid or not auth_token:
-        logger.error("Missing Twilio credentials in .env file")
-        logger.error("Please create a .env file with TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN")
-        return None
-    
-    return Client(account_sid, auth_token)
+# Initialize Twilio client
+client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-def send_sms_alert(to_phone: str, message: str) -> bool:
-    """
-    Send an SMS alert using Twilio, respecting the cooldown period.
+def send_sms_alert(to_phone, message):
+    global last_alert_time, client
     
-    Args:
-        to_phone (str): Destination phone number in E.164 format (+1234567890)
-        message (str): Alert message to send
-    
-    Returns:
-        bool: True if SMS was sent successfully or skipped due to cooldown,
-              False if there was an error
-    """
-    global last_alert_time
-    
-    # Check cooldown period
-    current_time = time.time()
-    time_since_last_alert = current_time - last_alert_time
-    
-    if time_since_last_alert < COOLDOWN_PERIOD:
-        logger.info(f"Skipping alert - in cooldown period ({time_since_last_alert:.1f}s < {COOLDOWN_PERIOD}s)")
-        return True
-    
-    # Get the 'from' phone number from .env
-    from_phone = os.getenv('TWILIO_FROM_PHONE')
-    if not from_phone:
-        logger.error("Missing TWILIO_FROM_PHONE in .env file")
-        return False
-    
-    # Initialize Twilio client
-    client = get_twilio_client()
-    if not client:
-        return False
+    if last_alert_time is not None:
+        time_since_last_alert = time.time() - last_alert_time
+        if time_since_last_alert < COOLDOWN_PERIOD:
+            print(f"Skipping alert - in cooldown period ({time_since_last_alert:.1f}s < {COOLDOWN_PERIOD}s)")
+            return False
     
     try:
-        # Send the message
         message = client.messages.create(
             body=message,
-            from_=from_phone,
+            from_=TWILIO_FROM_PHONE,
             to=to_phone
         )
-        
-        # Update last alert time
-        last_alert_time = current_time
-        
-        logger.info(f"SMS alert sent successfully. SID: {message.sid}")
+        print(f"SMS alert sent successfully. SID: {message.sid}")
+        last_alert_time = time.time()
         return True
-        
-    except TwilioRestException as e:
-        logger.error(f"Twilio API error: {e.msg}")
-        return False
     except Exception as e:
-        logger.error(f"Unexpected error sending SMS: {str(e)}")
+        print(f"Error sending SMS: {str(e)}")
         return False
 
-def set_cooldown_period(seconds: int):
-    """Set the cooldown period between alerts."""
+def set_cooldown_period(seconds):
     global COOLDOWN_PERIOD
     COOLDOWN_PERIOD = seconds
-    logger.info(f"Alert cooldown period set to {seconds} seconds")
-
-# Example usage and testing
-if __name__ == "__main__":
-    import sys
-    
-    # Test the SMS alert functionality
-    try:
-        # Check if required environment variables are set
-        required_vars = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM_PHONE']
-        missing_vars = [var for var in required_vars if not os.getenv(var)]
-        
-        if missing_vars:
-            print("Error: Missing required variables in .env file:")
-            for var in missing_vars:
-                print(f"  - {var}")
-            print("\nPlease create a .env file with the following:")
-            print("TWILIO_ACCOUNT_SID=your_account_sid")
-            print("TWILIO_AUTH_TOKEN=your_auth_token")
-            print("TWILIO_FROM_PHONE=+1234567890")
-            sys.exit(1)
-        
-        # Test phone number (should be configured by user)
-        test_phone = "+1234567890"  # Replace with actual phone number
-        
-        # Test multiple alerts with cooldown
-        print(f"Testing alerts with {COOLDOWN_PERIOD}s cooldown...")
-        
-        # First alert
-        print("\nSending first alert...")
-        send_sms_alert(test_phone, "Test alert 1")
-        
-        # Second alert (should be blocked by cooldown)
-        print("\nTrying to send second alert immediately...")
-        send_sms_alert(test_phone, "Test alert 2")
-        
-        # Wait for cooldown
-        print(f"\nWaiting {COOLDOWN_PERIOD} seconds...")
-        time.sleep(COOLDOWN_PERIOD)
-        
-        # Third alert (should work)
-        print("\nSending third alert after cooldown...")
-        send_sms_alert(test_phone, "Test alert 3")
-        
-    except Exception as e:
-        print(f"Error during testing: {e}") 

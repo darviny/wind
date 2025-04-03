@@ -1,498 +1,196 @@
 #!/usr/bin/env python3
-"""
-main.py - Main script for MPU6050 sensor monitoring system.
-
-Usage:
-    python main.py                     # Run with Random Forest model (default)
-    python main.py --model-type rf     # Run with Random Forest model
-    python main.py --model-type svm    # Run with One-Class SVM model
-    python main.py --model-type hybrid # Run with hybrid detection (SVM+RF)
-    
-Options:
-    --no-sms                          # Disable kjdSMS alerts
-    --svm-model PATH                  # Path to SVM model file (default: svm_model.pkl)
-    --rf-model PATH                   # Path to RF model file (default: rf_model.pkl)
-    
-Modes:
-    detect (default)                  # Run in detection mode
-    train                            # Run in training mode
-    
-Examples:
-    python main.py --model-type hybrid --svm-model custom_svm.pkl --rf-model custom_rf.pkl
-    python main.py train --no-sms
-"""
-
 import time
-import signal
 import sys
 import board
 import adafruit_mpu6050
-import argparse
+
 from datetime import datetime
-from data_handler import AccelerationBuffer, log_sensor_data_to_csv
-from lcd_alert import LCDAlert
-from sms_alert import send_sms_alert, set_cooldown_period
-from anomaly_detector import OneClassSVMDetector
-import joblib
+from lcd_alert import LCDAlert      
 
-# Global flag for clean exit
-running = True
+import sms_alert
+import anomaly_detector
+import sensor
 
-def signal_handler(sig, frame):
-    """Handle clean exit when Ctrl+C is pressed"""
-    global running
-    print("\nStopping data collection...")
-    running = False
+def format_alert(anomaly_type=None, svm_score=None, confidence=None, sensor_data=None):
+    alert = "================================================\n"
+    alert += "WIND TURBINE ALERT\n"
+    alert += "Time: " + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + "\n"
+    if anomaly_type:
+        alert += "Type: " + anomaly_type + "\n"
+    if svm_score is not None:
+        alert += "SVM Score: " + str(svm_score) + "\n"
+    if confidence is not None:
+        alert += "Confidence: " + str(confidence) + "%\n"
+    if sensor_data:
+        alert += "Sensor Readings:\n"
+        alert += "Accel (m/s²): X=" + "{:.2f}".format(sensor_data['accel_x']) + ", Y=" + "{:.2f}".format(sensor_data['accel_y']) + ", Z=" + "{:.2f}".format(sensor_data['accel_z']) + "\n"
+        alert += "Gyro (deg/s): X=" + "{:.2f}".format(sensor_data['gyro_x']) + ", Y=" + "{:.2f}".format(sensor_data['gyro_y']) + ", Z=" + "{:.2f}".format(sensor_data['gyro_z']) + "\n"
+        alert += "Temp: " + str(sensor_data['temp']) + "°C\n"
+    alert += "================================================"
+    return alert
 
-# Add near the start of the script, after the signal handler definition
-signal.signal(signal.SIGINT, signal_handler)
-
-def parse_args():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='MPU6050 sensor monitoring system')
-    parser.add_argument('mode', nargs='?', default='detect',
-                      choices=['detect', 'train'],
-                      help='Operating mode: detect (default) or train')
-    parser.add_argument('--no-sms', action='store_true',
-                      help='Disable SMS alerts')
-    parser.add_argument('--model-type', choices=['rf', 'svm', 'hybrid'], default='rf',
-                      help='Model type to use: rf (Random Forest), svm (One-Class SVM), or hybrid')
-    parser.add_argument('--svm-model', default='svm_model.pkl',
-                      help='Path to SVM model file (for svm or hybrid mode)')
-    parser.add_argument('--rf-model', default='rf_model.pkl',
-                      help='Path to Random Forest model file (for rf or hybrid mode)')
-    return parser.parse_args()
+def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
+    if model == 'hybrid':
+        # Extract features using the function from anomaly_detector.py
+        features = anomaly_detector.extract_features(buffer)
+        if features is None:
+            return False
+            
+        # Use SVM detector to check for anomalies
+        svm_score = svm_detector.predict(features)
+        
+        # SVM Score Explanation:
+        # - Positive scores: Sample is likely "normal" (inside decision boundary)
+        # - Negative scores: Sample is likely an anomaly (outside decision boundary)
+        # - Score magnitude: Further from zero = more confident prediction
+        #   * Large positive: Very confident sample is normal
+        #   * Large negative: Very confident sample is an anomaly
+        #   * Near zero: Sample is near decision boundary (uncertain)
+        # - Threshold of 0 is used to classify samples as normal or anomalous
+        
+        # If SVM detects an anomaly, use Random Forest to classify it
+        if svm_score < 0:  # Negative score indicates anomaly
+            # Use Random Forest to classify the anomaly type
+            anomaly_type = rf_detector.predict(features)
+            
+            # Get probability estimates
+            proba = rf_detector.model.predict_proba([features])[0]
+            confidence = max(proba) * 100
+                
+            anomaly_name = "Tempered Blade" if anomaly_type == 1 else "Gearbox Issue"
+            print(format_alert(anomaly_name, svm_score, confidence, sensor_data))
+            return True
+            
+    elif model == 'rf':
+        # Extract features using the function from anomaly_detector.py
+        features = anomaly_detector.extract_features(buffer)
+        if features is None:
+            return False
+            
+        # Use Random Forest to classify the anomaly type
+        anomaly_type = rf_detector.predict(features)
+        
+        # Get probability estimates
+        proba = rf_detector.model.predict_proba([features])[0]
+        confidence = max(proba) * 100
+        
+        # If confidence is high enough, consider it an anomaly
+        if confidence > 70:  # Threshold can be adjusted
+            anomaly_name = "Tempered Blade" if anomaly_type == 1 else "Gearbox Issue"
+            print(format_alert(anomaly_name, confidence=confidence, sensor_data=sensor_data))
+            return True
+        
+    else:  # svm mode
+        # Extract features using the function from anomaly_detector.py
+        features = anomaly_detector.extract_features(buffer)
+        if features is None:
+            return False
+            
+        # Use SVM detector to check for anomalies
+        svm_score = svm_detector.predict(features)
+        
+        # SVM Score Explanation:
+        # - Positive scores: Sample is likely "normal" (inside decision boundary)
+        # - Negative scores: Sample is likely an anomaly (outside decision boundary)
+        # - Score magnitude: Further from zero = more confident prediction
+        #   * Large positive: Very confident sample is normal
+        #   * Large negative: Very confident sample is an anomaly
+        #   * Near zero: Sample is near decision boundary (uncertain)
+        # - Threshold of 0 is used to classify samples as normal or anomalous
+        
+        # If SVM detects an anomaly
+        if svm_score < 0:  # Negative score indicates anomaly
+            print(format_alert(svm_score=svm_score, sensor_data=sensor_data))
+            return True
+    
+    return False
 
 def main():
-    # Parse command line arguments
-    args = parse_args()
-    training_mode = args.mode == 'train'
-    sms_enabled = not args.no_sms
+    # Arguments
+    model = 'svm'
+    alerts_enabled = False
     
-    if not sms_enabled:
-        print("SMS alerts are disabled")
+    if len(sys.argv) > 1:
+        model = sys.argv[1]
+    if len(sys.argv) > 2:
+        alerts_enabled = sys.argv[2].lower() == 'true'
     
-    sensor = None
-    buffer = None
     lcd = None
+    buffer = None
     
     try:
-        # Initialize LCD
-        print("Initializing LCD...")
-        try:
+        # Initialize components
+        if alerts_enabled:
             lcd = LCDAlert()
-            if training_mode:
-                lcd.display_alert("Training Mode...")
-            else:
-                lcd.display_alert("Starting up...")
-        except Exception as e:
-            print(f"Warning: LCD initialization failed: {e}")
-            lcd = None
-
-        # Initialize I2C and MPU6050 sensor
-        print("Initializing MPU6050 sensor...")
+            lcd.display_alert("Starting...")
+            sms_alert.set_cooldown_period(5)
+     
         i2c = board.I2C()
-        sensor = adafruit_mpu6050.MPU6050(i2c)
-        print("Sensor initialized successfully")
-        if lcd:
-            lcd.display_alert("Sensor Ready", duration=1)
+        sensor_device = adafruit_mpu6050.MPU6050(i2c)
+        buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
         
-        # Create data buffer for 1-second windows
-        buffer = SensorBuffer(window_size=1.0, expected_sample_rate=5)
+        if model == 'hybrid':
+            svm_detector = anomaly_detector.OneClassSVMDetector('models/svm_model.pkl')
+            rf_detector = anomaly_detector.RandomForestDetector('models/rf_model.pkl')
+        elif model == 'rf':
+            svm_detector = None
+            rf_detector = anomaly_detector.RandomForestDetector('models/rf_model.pkl')
+        else:  # svm mode
+            svm_detector = anomaly_detector.OneClassSVMDetector('models/svm_model.pkl')
+            rf_detector = None
         
-        if training_mode:
-            print("Starting data collection in TRAINING MODE at 5 Hz. Press Ctrl+C to exit.")
-            if lcd:
-                lcd.display_alert("Training Mode")
-        else:
-            print("Starting data collection at 5 Hz. Press Ctrl+C to exit.")
-            if lcd:
-                lcd.display_alert("Monitoring...")
+        print("Components Ready")
+        print(f"\nMonitoring started at 5 Hz with {model} model")
+        print("Press Ctrl+C to stop")
+        
+        while True:
+            # Read sensor
+            accel = sensor_device.acceleration
+            gyro = sensor_device.gyro
+            temp = sensor_device.temperature
+            timestamp = datetime.now()
+            accel_x, accel_y, accel_z = accel
+            gyro_x, gyro_y, gyro_z = gyro
             
-            # Initialize appropriate detector(s)
-            if args.model_type == 'hybrid':
-                print("Initializing hybrid detection mode...")
-                svm_detector = OneClassSVMDetector(args.svm_model)
-                rf_detector = TurbineAnomalyDetector(args.rf_model)
-                print("Both models loaded successfully")
-            elif args.model_type == 'rf':
-                rf_detector = TurbineAnomalyDetector(args.rf_model)
-            else:  # svm mode
-                svm_detector = OneClassSVMDetector(args.svm_model)
+            sensor_data = {
+                'accel_x': accel_x, 'accel_y': accel_y, 'accel_z': accel_z,
+                'gyro_x': gyro_x, 'gyro_y': gyro_y, 'gyro_z': gyro_z,
+                'temp': temp
+            }
             
-            # Only set cooldown if SMS is enabled
-            if sms_enabled:
-                set_cooldown_period(5)
-        
-        # Main data collection loop
-        while running:
-            try:
-                # Read all sensor data
-                accel = sensor.acceleration
-                gyro = sensor.gyro
-                temp = sensor.temperature
-                timestamp = datetime.now()
+            sensor.log_sensor_data_to_csv(sensor_data, timestamp.isoformat())
+            
+            # Update display
+            if lcd:
+                lcd.lcd.clear()
+                lcd.lcd.cursor_pos = (0, 0)
+                lcd.lcd.write_string(f"X:{accel_x:.1f} Y:{accel_y:.1f}")
+                lcd.lcd.cursor_pos = (1, 0)
+                lcd.lcd.write_string(f"Z:{accel_z:.1f}")
+            
+            # Check for anomalies
+            if buffer.add_reading(sensor_data, timestamp):
+                is_anomaly = check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data)
                 
-                # Unpack the tuples
-                accel_x, accel_y, accel_z = accel
-                gyro_x, gyro_y, gyro_z = gyro
-                
-                # Log raw data to CSV with unpacked values
-                success = log_sensor_data_to_csv(
-                    accel_x, accel_y, accel_z,
-                    gyro_x, gyro_y, gyro_z,
-                    temp,
-                    timestamp.isoformat()
-                )
-                
-                # Debug: Print values being logged
-                print("\n=== Data Being Logged ===")
-                print(f"Time: {timestamp.isoformat()}")
-                print(f"Acceleration (m/s²): X={accel_x:.3f}, Y={accel_y:.3f}, Z={accel_z:.3f}")
-                print(f"Gyroscope (deg/s): X={gyro_x:.3f}, Y={gyro_y:.3f}, Z={gyro_z:.3f}")
-                print(f"Temperature: {temp:.1f}°C")
-                print(f"Log success: {success}")
-                print("=" * 20)
-                
-                if success and lcd:
-                    # Update LCD with current readings
-                    lcd.lcd.clear()
-                    lcd.lcd.cursor_pos = (0, 0)
-                    lcd.lcd.write_string(f"X:{accel_x:.1f} Y:{accel_y:.1f}")
-                    lcd.lcd.cursor_pos = (1, 0)
-                    lcd.lcd.write_string(f"Z:{accel_z:.1f}")
-                
-                # Add data to the processing buffer
-                window_processed = buffer.add_reading(
-                    accel_x, accel_y, accel_z,
-                    gyro_x, gyro_y, gyro_z,
-                    timestamp
-                )
-                
-                if window_processed and not training_mode:
-                    # Extract features and make prediction
-                    if args.model_type == 'hybrid':
-                        svm_features = svm_detector.extract_features(buffer)
-                    elif args.model_type == 'rf':
-                        features = rf_detector.extract_features(buffer)
-                    else:  # svm mode
-                        features = svm_detector.extract_features(buffer)
+                if is_anomaly:
+                    if lcd:
+                        lcd.display_alert("ANOMALY DETECTED!")
                     
-                    # Print current readings first
-                    print("\n=== Current Readings ===")
-                    print(f"Time: {timestamp.isoformat()}")
-                    print(f"Model: {args.model_type.upper()}")
-                    print(f"Acceleration (m/s²): X={accel_x:.2f}, Y={accel_y:.2f}, Z={accel_z:.2f}")
-                    print(f"Gyroscope (deg/s): X={gyro_x:.2f}, Y={gyro_y:.2f}, Z={gyro_z:.2f}")
-                    print(f"Temperature: {temp:.1f}°C")
-                    
-                    if args.model_type == 'hybrid':
-                        print("\n=== Hybrid Detection Results ===")
-                        # Extract features for SVM
-                        svm_features = svm_detector.extract_features(buffer)
-                        is_anomaly, svm_score = svm_detector.predict(svm_features)
-                        
-                        # Log SVM results
-                        print(f"SVM Analysis:")
-                        print(f"└── Decision Score: {svm_score:.3f}")
-                        print(f"└── Initial Detection: {'Anomaly' if is_anomaly else 'Normal'}")
-                        
-                        if is_anomaly:
-                            # If SVM detects anomaly, use RF to classify it
-                            print("\nActivating Random Forest for classification...")
-                            rf_features = rf_detector.extract_features(buffer)
-                            rf_is_anomaly, anomaly_type = rf_detector.predict(rf_features)
-                            
-                            # Get probability scores if available
-                            try:
-                                proba = rf_detector.model.predict_proba([rf_features])[0]
-                                class_confidence = max(proba) * 100
-                            except:
-                                class_confidence = None
-                            
-                            # Log RF results
-                            print(f"Random Forest Analysis:")
-                            print(f"└── Classification: Type {anomaly_type}")
-                            if class_confidence is not None:
-                                print(f"└── Confidence: {class_confidence:.1f}%")
-                            
-                            anomaly_name = "Tempered Blade" if anomaly_type == 1 else "Gearbox Issue"
-                            alert_msg = (
-                                f"Anomaly detected!\n"
-                                f"Type: {anomaly_name}\n"
-                                f"SVM Score: {svm_score:.3f}"
-                                + (f"\nConfidence: {class_confidence:.1f}%" if class_confidence is not None else "")
-                            )
-                            
-                            print("\nFinal Decision:")
-                            print(f"└── {alert_msg.replace('\n', '\n    ')}")
-                        
-                    elif args.model_type == 'rf':
-                        # Extract features and predict
-                        features = rf_detector.extract_features(buffer)
-                        is_anomaly, anomaly_type = rf_detector.predict(features)
-                        
-                        if is_anomaly:
-                            anomaly_name = "Tempered Blade" if anomaly_type == 1 else "Gearbox Issue"
-                            alert_msg = f"Anomaly detected! Type: {anomaly_name}"
-                    
-                    else:  # svm mode
-                        # Extract features and predict
-                        features = svm_detector.extract_features(buffer)
-                        is_anomaly, svm_score = svm_detector.predict(features)
-                        
-                        if is_anomaly:
-                            alert_msg = f"Anomaly detected! Score: {svm_score:.3f}"
-                    
-                    if is_anomaly:
-                        print("\n" + "!" * 50)
-                        print(f"*** {alert_msg} ***")
-                        print("!" * 50)
-                        
-                        if lcd:
-                            # For hybrid mode, show more detailed alert on LCD
-                            if args.model_type == 'hybrid':
-                                if 'anomaly_name' in locals():  # Check if variable exists
-                                    lcd.display_alert(f"ANOMALY: {anomaly_name}")
-                                else:
-                                    lcd.display_alert("ANOMALY DETECTED!")
-                            else:
-                                lcd.display_alert("ANOMALY DETECTED!")
-                        
-                        if sms_enabled:
-                            # Format SMS message based on model type
-                            if args.model_type == 'hybrid':
-                                sms_msg = (
-                                    f"WIND TURBINE ALERT\n"
-                                    f"Time: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                                    f"Type: {anomaly_name}\n"
-                                    f"SVM Score: {svm_score:.3f}\n"
-                                    + (f"Confidence: {class_confidence:.1f}%\n" if class_confidence is not None else "")
-                                    f"\nSensor Readings:\n"
-                                    f"Accel (m/s²): X={accel_x:.2f}, Y={accel_y:.2f}, Z={accel_z:.2f}\n"
-                                    f"Gyro (deg/s): X={gyro_x:.2f}, Y={gyro_y:.2f}, Z={gyro_z:.2f}\n"
-                                    f"Temp: {temp:.1f}°C"
-                                )
-                            elif args.model_type == 'rf':
-                                sms_msg = (
-                                    f"WIND TURBINE ALERT\n"
-                                    f"Time: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                                    f"Type: {anomaly_name}\n"
-                                    f"\nSensor Readings:\n"
-                                    f"Accel (m/s²): X={accel_x:.2f}, Y={accel_y:.2f}, Z={accel_z:.2f}\n"
-                                    f"Gyro (deg/s): X={gyro_x:.2f}, Y={gyro_y:.2f}, Z={gyro_z:.2f}\n"
-                                    f"Temp: {temp:.1f}°C"
-                                )
-                            else:  # svm mode
-                                sms_msg = (
-                                    f"WIND TURBINE ALERT\n"
-                                    f"Time: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                                    f"Anomaly Score: {svm_score:.3f}\n"
-                                    f"\nSensor Readings:\n"
-                                    f"Accel (m/s²): X={accel_x:.2f}, Y={accel_y:.2f}, Z={accel_z:.2f}\n"
-                                    f"Gyro (deg/s): X={gyro_x:.2f}, Y={gyro_y:.2f}, Z={gyro_z:.2f}\n"
-                                    f"Temp: {temp:.1f}°C"
-                                )
-                            
-                            send_sms_alert("+17782383531", sms_msg)
-                    
-                    print("\n" + "=" * 50)
-                
-                # Wait for next sample (5 Hz = 0.2 seconds)
-                time.sleep(0.2)
-                
-            except Exception as e:
-                print(f"\nError reading sensor: {e}")
-                if lcd:
-                    lcd.display_alert(f"Error: {str(e)[:16]}")
-                time.sleep(0.2)
-    
+                    if alerts_enabled:
+                        alert_message = format_alert(sensor_data=sensor_data)
+                        sms_alert.send_sms_alert('+17782383531', alert_message)
+            
+            time.sleep(0.2)  # 5 Hz
     except KeyboardInterrupt:
-        print("\nData collection interrupted by user")
-        if lcd:
-            lcd.display_alert("Stopping...", duration=1)
-    except Exception as e:
-        print(f"Error: {e}")
-        if lcd:
-            lcd.display_alert("Error! Check log")
-        print("Please check:")
-        print("1. Sensor connections (SDA, SCL, VCC, GND)")
-        print("2. I2C is enabled (sudo raspi-config)")
-        print("3. I2C permissions (sudo usermod -aG i2c $USER)")
-        return 1
+        print("\nStopping...")
     finally:
-        # Clean up
         if buffer:
-            print("Processing remaining data...")
             buffer.process_remaining_data()
         if lcd:
             lcd.clear()
-    
-    print("Data collection complete.")
-    return 0
-
-class SensorBuffer:
-    def __init__(self, window_size=1.0, expected_sample_rate=5):
-        self.window_size = window_size
-        self.expected_samples = int(window_size * expected_sample_rate)
-        self.reset_buffer()
         
-    def reset_buffer(self):
-        self.timestamps = []
-        self.accel_x = []
-        self.accel_y = []
-        self.accel_z = []
-        self.gyro_x = []
-        self.gyro_y = []
-        self.gyro_z = []
-        
-    def add_reading(self, accel_x, accel_y, accel_z, 
-                   gyro_x, gyro_y, gyro_z, timestamp):
-        """Add a sensor reading to the buffer."""
-        self.timestamps.append(timestamp)
-        self.accel_x.append(accel_x)
-        self.accel_y.append(accel_y)
-        self.accel_z.append(accel_z)
-        self.gyro_x.append(gyro_x)
-        self.gyro_y.append(gyro_y)
-        self.gyro_z.append(gyro_z)
-        
-        window_ready = len(self.timestamps) >= self.expected_samples
-        if window_ready:
-            self.process_window()
-            self.reset_buffer()
-        return window_ready
-    
-    def process_window(self):
-        """Process the current window of data."""
-        # This method was missing in the original code
-        # Implement processing logic here - currently it just logs
-        print(f"Processing window with {len(self.timestamps)} samples")
-        # If needed, you can save data or perform calculations here
-    
-    def process_remaining_data(self):
-        """Process any remaining data in the buffer."""
-        if len(self.timestamps) > 0:
-            print(f"Processing remaining {len(self.timestamps)} samples")
-            self.process_window()
-            self.reset_buffer()
-    
-    def compute_statistics(self):
-        """Compute statistical features from the current buffer."""
-        import numpy as np
-        from scipy import stats as scipy_stats
-        
-        result = {}
-        
-        # Process acceleration data
-        for axis, data in [('x', self.accel_x), ('y', self.accel_y), ('z', self.accel_z)]:
-            if not data:
-                continue
-                
-            # Basic statistics
-            result[f'accel_{axis}_mean'] = np.mean(data)
-            result[f'accel_{axis}_std'] = np.std(data)
-            result[f'accel_{axis}_min'] = np.min(data)
-            result[f'accel_{axis}_max'] = np.max(data)
-            result[f'accel_{axis}_median'] = np.median(data)
-            
-            # Skewness and kurtosis
-            result[f'accel_{axis}_skew'] = scipy_stats.skew(data) if len(data) > 2 else 0
-            result[f'accel_{axis}_kurtosis'] = scipy_stats.kurtosis(data) if len(data) > 3 else 0
-            
-            # Range and interquartile range
-            result[f'accel_{axis}_range'] = np.max(data) - np.min(data)
-            q75, q25 = np.percentile(data, [75, 25])
-            result[f'accel_{axis}_iqr'] = q75 - q25
-        
-        # Process gyroscope data
-        for axis, data in [('x', self.gyro_x), ('y', self.gyro_y), ('z', self.gyro_z)]:
-            if not data:
-                continue
-                
-            # Basic statistics
-            result[f'gyro_{axis}_mean'] = np.mean(data)
-            result[f'gyro_{axis}_std'] = np.std(data)
-            result[f'gyro_{axis}_min'] = np.min(data)
-            result[f'gyro_{axis}_max'] = np.max(data)
-            result[f'gyro_{axis}_median'] = np.median(data)
-            
-            # Skewness and kurtosis
-            result[f'gyro_{axis}_skew'] = scipy_stats.skew(data) if len(data) > 2 else 0
-            result[f'gyro_{axis}_kurtosis'] = scipy_stats.kurtosis(data) if len(data) > 3 else 0
-            
-            # Range and interquartile range
-            result[f'gyro_{axis}_range'] = np.max(data) - np.min(data)
-            q75, q25 = np.percentile(data, [75, 25])
-            result[f'gyro_{axis}_iqr'] = q75 - q25
-        
-        return result
-    
-    def compute_acf(self, data_type, nlags=4):
-        """Compute autocorrelation function for the specified data type."""
-        import numpy as np
-        from statsmodels.tsa.stattools import acf
-        
-        # Get the appropriate data array based on data_type
-        data_array = getattr(self, data_type) if hasattr(self, data_type) else []
-        
-        if len(data_array) <= 1:
-            # Not enough data points for ACF
-            return [0] * nlags
-        
-        try:
-            # Calculate ACF
-            acf_values = acf(data_array, nlags=nlags, fft=False)
-            # Remove the first value (lag 0, always 1.0)
-            acf_values = acf_values[1:]
-            return acf_values
-        except Exception as e:
-            print(f"Error computing ACF for {data_type}: {e}")
-            return [0] * nlags
-class TurbineAnomalyDetector:
-    def __init__(self, model_path='model.pkl'):
-        self.model, self.features = load_model(model_path)
-        if self.model is None:
-            raise RuntimeError("Failed to load model")
-        print("Model loaded successfully")
-        
-    def extract_features(self, buffer):
-        """Extract all required features from the buffer."""
-        # First get ACF features
-        acf_features = {}
-        for axis in ['x', 'y', 'z']:
-            acf = buffer.compute_acf(f'accel_{axis}', nlags=4)
-            for lag in range(1, 5):
-                acf_features[f'accel_{axis}_acf_lag{lag}'] = acf[lag-1]
-            
-            acf = buffer.compute_acf(f'gyro_{axis}', nlags=4)
-            for lag in range(1, 5):
-                acf_features[f'gyro_{axis}_acf_lag{lag}'] = acf[lag-1]
-        
-        # Get statistical features
-        stats = buffer.compute_statistics()
-        
-        # Combine all features in the correct order
-        feature_values = []
-        for feature in self.features:
-            if feature in acf_features:
-                feature_values.append(acf_features[feature])
-            else:
-                feature_values.append(stats[feature])
-                
-        return feature_values
-        
-    def predict(self, feature_values):
-        """Make prediction using the loaded model."""
-        try:
-            prediction = self.model.predict([feature_values])[0]
-            # Convert to binary anomaly detection
-            # 0 = normal, 1/2 = anomaly types
-            is_anomaly = prediction != 0
-            return is_anomaly, prediction
-        except Exception as e:
-            print(f"Error making prediction: {e}")
-            return True, -1  # Return as anomaly in case of error
+        print("\nMonitoring complete")
+        return 0
 
 if __name__ == "__main__":
     sys.exit(main())
