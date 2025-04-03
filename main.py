@@ -4,6 +4,7 @@ import sys
 import board
 import adafruit_mpu6050
 import traceback
+import numpy as np
 
 from datetime import datetime
 from lcd_alert import LCDAlert      
@@ -50,7 +51,7 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
         # - Threshold of 0 is used to classify samples as normal or anomalous
         
         # If SVM detects an anomaly, use Random Forest to classify it
-        if svm_score < 0:  # Negative score indicates anomaly
+        if np.any(svm_score < 0):  # Negative score indicates anomaly
             # Use Random Forest to classify the anomaly type
             anomaly_type = rf_detector.predict(features)
             
@@ -100,7 +101,7 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
         # - Threshold of 0 is used to classify samples as normal or anomalous
         
         # If SVM detects an anomaly
-        if svm_score < 0:  # Negative score indicates anomaly
+        if np.any(svm_score < 0):  # Negative score indicates anomaly
             print(format_alert(svm_score=svm_score, sensor_data=sensor_data))
             return True
     
