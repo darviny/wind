@@ -39,25 +39,19 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             print("No window data available")
             return False
             
-        # Extract features using the function from anomaly_detector.py
-        features = anomaly_detector.extract_features(buffer)
-        if features is None:
-            print("No features extracted")
-            return False
-            
         # Use SVM detector to check for anomalies
-        svm_score = svm_detector.predict(features)
+        svm_score = svm_detector.predict(buffer.last_features)
         print(f"SVM score: {svm_score}")
         
         # If SVM detects an anomaly, use Random Forest to classify it
         if np.any(svm_score < 0):  # Negative score indicates anomaly
             print("SVM detected anomaly")
             # Use Random Forest to classify the anomaly type
-            anomaly_type = rf_detector.predict(features)
+            anomaly_type = rf_detector.predict(buffer.last_features)
             print(f"RF predicted anomaly type: {anomaly_type}")
             
             # Get probability estimates
-            proba = rf_detector.model.predict_proba([features])[0]
+            proba = rf_detector.model.predict_proba([buffer.last_features])[0]
             confidence = max(proba) * 100
             print(f"RF confidence: {confidence}%")
                 
@@ -74,18 +68,12 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             print("No window data available")
             return False
             
-        # Extract features using the function from anomaly_detector.py
-        features = anomaly_detector.extract_features(buffer)
-        if features is None:
-            print("No features extracted")
-            return False
-            
         # Use Random Forest to classify the anomaly type
-        anomaly_type = rf_detector.predict(features)
+        anomaly_type = rf_detector.predict(buffer.last_features)
         print(f"RF predicted anomaly type: {anomaly_type}")
         
         # Get probability estimates
-        proba = rf_detector.model.predict_proba([features])[0]
+        proba = rf_detector.model.predict_proba([buffer.last_features])[0]
         confidence = max(proba) * 100
         print(f"RF confidence: {confidence}%")
         
@@ -104,14 +92,8 @@ def check_anomaly(model, buffer, svm_detector, rf_detector, sensor_data):
             print("No window data available")
             return False
             
-        # Extract features using the function from anomaly_detector.py
-        features = anomaly_detector.extract_features(buffer)
-        if features is None:
-            print("No features extracted")
-            return False
-            
         # Use SVM detector to check for anomalies
-        svm_score = svm_detector.predict(features)
+        svm_score = svm_detector.predict(buffer.last_features)
         print(f"SVM score: {svm_score}")
         
         # If SVM detects an anomaly
