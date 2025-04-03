@@ -72,6 +72,14 @@ class SensorBuffer:
             print(f"Not enough samples in _process_window. Need {self.samples_needed}, have {len(self.accel_x)}")
             return None
             
+        print("Processing window with data:")
+        print(f"Accel X: {self.accel_x}")
+        print(f"Accel Y: {self.accel_y}")
+        print(f"Accel Z: {self.accel_z}")
+        print(f"Gyro X: {self.gyro_x}")
+        print(f"Gyro Y: {self.gyro_y}")
+        print(f"Gyro Z: {self.gyro_z}")
+            
         # Create numpy array from sensor data
         # Shape before transpose: (6, n_samples)
         # - 6 rows (one for each sensor: accel_x,y,z and gyro_x,y,z)
@@ -91,25 +99,38 @@ class SensorBuffer:
         # Initialize features list
         features = []
         
-        # For each sensor (accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z)
-        for i in range(6):  # 6 sensors
-            sensor_data = window[:, i]
+        try:
+            # For each sensor (accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z)
+            for i in range(6):  # 6 sensors
+                sensor_data = window[:, i]
+                print(f"Processing sensor {i} with data: {sensor_data}")
+                
+                # Add statistical features
+                stats_features = compute_aggregate_features(sensor_data)
+                print(f"Statistical features for sensor {i}: {stats_features}")
+                features.extend(stats_features)
+                
+                # Add ACF features
+                acf_features = compute_acf_features(sensor_data)
+                print(f"ACF features for sensor {i}: {acf_features}")
+                features.extend(acf_features)
             
-            # Add statistical features
-            features.extend(compute_aggregate_features(sensor_data))
+            features = np.array(features)
+            print(f"Successfully processed window. Total features: {len(features)}")
             
-            # Add ACF features
-            features.extend(compute_acf_features(sensor_data))
-        
-        # Only clear buffers after successfully processing the window
-        self.accel_x = []
-        self.accel_y = []
-        self.accel_z = []
-        self.gyro_x = []
-        self.gyro_y = []
-        self.gyro_z = []
-        
-        return np.array(features)
+            # Only clear buffers after successful processing
+            self.accel_x = []
+            self.accel_y = []
+            self.accel_z = []
+            self.gyro_x = []
+            self.gyro_y = []
+            self.gyro_z = []
+            
+            return features
+            
+        except Exception as e:
+            print(f"Error processing window: {e}")
+            return None
             
     def process_remaining_data(self):
         if self.accel_x:
