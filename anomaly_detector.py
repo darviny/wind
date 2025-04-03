@@ -32,23 +32,23 @@ def extract_features(buffer):
     data = np.array(data)
     print(f"Data shape: {data.shape}")
     
-    # Extract features
+    # Extract features in a consistent order
     features = []
     feature_names = []
     
     # For each sensor (accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z)
     sensor_names = ['accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z']
-    for i, sensor_name in enumerate(sensor_names):
-        sensor_data = data[:, i]
+    for sensor_name in sensor_names:
+        sensor_data = data[:, sensor_names.index(sensor_name)]
         print(f"Sensor {sensor_name} data length: {len(sensor_data)}")
         
-        # Add statistical features
+        # Add statistical features in consistent order
         stat_features = [
-            np.mean(sensor_data),
-            np.std(sensor_data),
-            np.max(sensor_data),
-            np.min(sensor_data),
-            np.median(sensor_data),
+            np.mean(sensor_data),      # mean
+            np.std(sensor_data),       # std
+            np.max(sensor_data),       # max
+            np.min(sensor_data),       # min
+            np.median(sensor_data),    # median
             np.percentile(sensor_data, 25),  # q1
             np.percentile(sensor_data, 75),  # q3
             np.percentile(sensor_data, 75) - np.percentile(sensor_data, 25),  # iqr
@@ -70,9 +70,9 @@ def extract_features(buffer):
         features.extend(stat_features)
         feature_names.extend(stat_names)
         
-        # Add ACF features
+        # Add ACF features in consistent order
         acf_features = compute_acf_features(sensor_data)
-        acf_names = [f'{sensor_name}_acf_{i+1}' for i in range(len(acf_features))]
+        acf_names = [f'{sensor_name}_acf_lag{i+1}' for i in range(len(acf_features))]
         print(f"Sensor {sensor_name} ACF features: {acf_features}")
         features.extend(acf_features)
         feature_names.extend(acf_names)
@@ -90,6 +90,7 @@ class OneClassSVMDetector:
                 self.model = model_data['model']
                 self.feature_names = model_data.get('feature_names', [])
                 print("Loaded model from dictionary")
+                print(f"Feature names: {self.feature_names}")
             else:
                 self.model = model_data
                 self.feature_names = []
@@ -109,6 +110,7 @@ class OneClassSVMDetector:
                 self.scaler = scaler_data['scaler']
                 self.scaler_feature_names = scaler_data.get('feature_names', [])
                 print("Loaded scaler from dictionary")
+                print(f"Scaler feature names: {self.scaler_feature_names}")
             else:
                 self.scaler = scaler_data
                 self.scaler_feature_names = []
@@ -128,9 +130,11 @@ class OneClassSVMDetector:
                 # Convert features to DataFrame with feature names if available
                 if hasattr(self, 'scaler_feature_names') and self.scaler_feature_names:
                     import pandas as pd
+                    print(f"Using feature names: {self.scaler_feature_names}")
                     features_df = pd.DataFrame(features, columns=self.scaler_feature_names)
                     features = self.scaler.transform(features_df)
                 else:
+                    print("No feature names available, using direct transformation")
                     features = self.scaler.transform(features)
             except Exception as e:
                 print(f"Error in scaling: {e}")
@@ -174,6 +178,7 @@ class RandomForestDetector:
                 self.scaler = model_data.get('scaler')
                 self.scaler_feature_names = model_data.get('scaler_feature_names', [])
                 print("Loaded Random Forest model from dictionary")
+                print(f"Feature names: {self.feature_names}")
             else:
                 self.model = model_data
                 self.feature_names = []
@@ -201,9 +206,11 @@ class RandomForestDetector:
                 # Convert features to DataFrame with feature names if available
                 if self.scaler_feature_names:
                     import pandas as pd
+                    print(f"Using feature names: {self.scaler_feature_names}")
                     features_df = pd.DataFrame(feature_vector.reshape(1, -1), columns=self.scaler_feature_names)
                     feature_vector = self.scaler.transform(features_df)
                 else:
+                    print("No feature names available, using direct transformation")
                     feature_vector = self.scaler.transform(feature_vector.reshape(1, -1))
             except Exception as e:
                 print(f"Error in scaling: {e}")
