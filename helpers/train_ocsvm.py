@@ -38,13 +38,15 @@ def extract_features(data):
         for suffix in suffixes:
             col_name = sensor + suffix
             if col_name in data.columns:
-                features.append(data[col_name].values[0])  # Get the first row's value
+                features.append(data[col_name].values)  # Get all values for this feature
                 feature_names.append(col_name)
             else:
                 print(f"Warning: Column {col_name} not found in data")
     
-    features = np.array(features)
-    print(f"Total features extracted: {len(features)}")
+    # Transpose to get shape (n_samples, n_features)
+    features = np.array(features).T
+    print(f"Total features extracted: {features.shape[1]}")
+    print(f"Number of samples: {features.shape[0]}")
     print(f"Feature names: {feature_names}")
     return features, feature_names
 
@@ -52,9 +54,10 @@ def train_and_save_model(features, feature_names, model_path, scaler_path):
     """Train One-Class SVM model and save it with feature names."""
     try:
         # Convert features to DataFrame with feature names
-        features_df = pd.DataFrame(features.reshape(1, -1), columns=feature_names)
-        print("\nFeatures DataFrame:")
-        print(features_df)
+        features_df = pd.DataFrame(features, columns=feature_names)
+        print("\nFeatures DataFrame shape:", features_df.shape)
+        print("\nFirst 5 rows of features:")
+        print(features_df.head())
         
         # Scale features using the DataFrame to preserve feature names
         scaler = StandardScaler()
