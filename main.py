@@ -144,13 +144,13 @@ def main():
         
         print("Loading anomaly detection models...")
         if model == 'hybrid':
-            svm_detector = anomaly_detector.OneClassSVMDetector('models/svm_model.pkl')
-            rf_detector = anomaly_detector.RandomForestDetector('models/rf_model.pkl')
+            svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl')
+            rf_detector = anomaly_detector.RandomForestDetector('models/model_rf.pkl')
         elif model == 'rf':
             svm_detector = None
-            rf_detector = anomaly_detector.RandomForestDetector('models/rf_model.pkl')
+            rf_detector = anomaly_detector.RandomForestDetector('models/model_rf.pkl')
         else:  # svm mode
-            svm_detector = anomaly_detector.OneClassSVMDetector('models/svm_model.pkl')
+            svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl')
             rf_detector = None
         print("Anomaly detection models loaded successfully")
         
@@ -204,8 +204,7 @@ def main():
     finally:
         if buffer:
             buffer.process_remaining_data()
-        if lcd:
-            lcd.clear()
+
         
         print("\nMonitoring complete")
         return 0

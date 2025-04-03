@@ -57,15 +57,20 @@ def extract_features(buffer):
 class OneClassSVMDetector:
     def __init__(self, model_path='models/model.pkl', scaler_path='models/scaler.pkl'):
         self.model = joblib.load(model_path)
-        self.scaler = joblib.load(scaler_path)
-        print("Successfully loaded model and scaler")
+        try:
+            self.scaler = joblib.load(scaler_path)
+            print("Successfully loaded model and scaler")
+        except (FileNotFoundError, IOError):
+            print(f"Scaler file {scaler_path} not found. Using identity scaling.")
+            self.scaler = None
                 
     def predict(self, features):
         if features is None:
             return 0.0
             
         features = np.array(features).reshape(1, -1)
-        features = self.scaler.transform(features)
+        if self.scaler is not None:
+            features = self.scaler.transform(features)
         
         # Get decision function score (negative distance to hyperplane)
         # More negative score = more likely to be an anomaly
