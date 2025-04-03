@@ -65,25 +65,42 @@ def extract_features(buffer):
 
 class OneClassSVMDetector:
     def __init__(self, model_path='models/model.pkl', scaler_path='models/scaler.pkl'):
-        self.model = joblib.load(model_path)
+        try:
+            self.model = joblib.load(model_path)
+            print(f"Successfully loaded model from {model_path}")
+            print(f"Model type: {type(self.model)}")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            self.model = None
+            
         try:
             self.scaler = joblib.load(scaler_path)
-            print("Successfully loaded model and scaler")
+            print("Successfully loaded scaler")
         except (FileNotFoundError, IOError):
             print(f"Scaler file {scaler_path} not found. Using identity scaling.")
             self.scaler = None
                 
     def predict(self, features):
-        if features is None:
+        if features is None or self.model is None:
             return 0.0
             
         features = np.array(features).reshape(1, -1)
         if self.scaler is not None:
             features = self.scaler.transform(features)
         
-        # Get decision function score (negative distance to hyperplane)
-        # More negative score = more likely to be an anomaly
-        return float(self.model.decision_function(features)[0])
+        try:
+            # Try to use decision_function if available
+            if hasattr(self.model, 'decision_function'):
+                score = self.model.decision_function(features)[0]
+            else:
+                # If no decision_function, use predict and return -1 for anomalies
+                pred = self.model.predict(features)[0]
+                score = -1.0 if pred == -1 else 1.0
+                
+            return float(score)
+        except Exception as e:
+            print(f"Error in prediction: {e}")
+            return 0.0
 
 class RandomForestDetector:
     def __init__(self, model_path):
