@@ -23,10 +23,14 @@ def compute_acf_features(signal, n_lags=4):
 def extract_features(buffer):
     # Get the latest window of data
     data = buffer.get_latest_window()
+    print(f"Buffer data length: {len(data) if data is not None else 0}")
+    
     if data is None or len(data) == 0:
+        print("No data in buffer")
         return None
         
     data = np.array(data)
+    print(f"Data shape: {data.shape}")
     
     # Extract features
     features = []
@@ -34,6 +38,7 @@ def extract_features(buffer):
     # For each sensor (accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z)
     for i in range(6):  # 6 sensors
         sensor_data = data[:, i]
+        print(f"Sensor {i} data length: {len(sensor_data)}")
         
         # Add statistical features
         features.extend([
@@ -50,9 +55,13 @@ def extract_features(buffer):
         ])
         
         # Add ACF features
-        features.extend(compute_acf_features(sensor_data))
+        acf_features = compute_acf_features(sensor_data)
+        print(f"Sensor {i} ACF features: {acf_features}")
+        features.extend(acf_features)
     
-    return np.array(features)
+    features = np.array(features)
+    print(f"Total features extracted: {len(features)}")
+    return features
 
 class OneClassSVMDetector:
     def __init__(self, model_path='models/model.pkl', scaler_path='models/scaler.pkl'):

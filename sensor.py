@@ -110,11 +110,25 @@ class SensorBuffer:
         return None
 
     def get_latest_window(self):
+        print(f"Buffer lengths: accel_x={len(self.accel_x)}, accel_y={len(self.accel_y)}, accel_z={len(self.accel_z)}, "
+              f"gyro_x={len(self.gyro_x)}, gyro_y={len(self.gyro_y)}, gyro_z={len(self.gyro_z)}")
+        
         if len(self.accel_x) < self.samples_needed:
+            print(f"Not enough samples. Need {self.samples_needed}, have {len(self.accel_x)}")
             return None
             
+        # Create numpy array from sensor data
+        # Shape before transpose: (6, n_samples)
+        # - 6 rows (one for each sensor: accel_x,y,z and gyro_x,y,z)
+        # - n_samples columns (one for each reading)
         window = np.array([
             self.accel_x, self.accel_y, self.accel_z,
             self.gyro_x, self.gyro_y, self.gyro_z
         ])
-        return window.T
+        
+        # Transpose to shape (n_samples, 6)
+        # - n_samples rows (one for each reading)
+        # - 6 columns (one for each sensor)
+        window = window.T
+        print(f"Window shape: {window.shape}")
+        return window
