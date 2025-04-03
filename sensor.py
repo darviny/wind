@@ -57,9 +57,9 @@ class SensorBuffer:
         window_complete = (timestamp - self.start_time).total_seconds() >= self.window_size
         
         if window_complete and len(self.accel_x) >= self.samples_needed:
-            self._process_window()
+            features = self._process_window()
             self.start_time = timestamp
-            return True
+            return features is not None
         
         return False
 
@@ -72,8 +72,8 @@ class SensorBuffer:
         # - 6 rows (one for each sensor: accel_x,y,z and gyro_x,y,z)
         # - n_samples columns (one for each reading)
         window = np.array([
-            self.accel_x, self.accel_y, self.accel_z,
-            self.gyro_x, self.gyro_y, self.gyro_z
+            self.accel_x.copy(), self.accel_y.copy(), self.accel_z.copy(),
+            self.gyro_x.copy(), self.gyro_y.copy(), self.gyro_z.copy()
         ])
         
         # Transpose to shape (n_samples, 6)
