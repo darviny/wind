@@ -59,7 +59,15 @@ def main():
         
     alerts_enabled = sys.argv[1].lower() == 'true'
     sensitivity = float(sys.argv[2]) if len(sys.argv) > 2 else 0.5
-    threshold = float(sys.argv[3]) if len(sys.argv) > 3 else -0.5
+    
+    # Handle threshold parameter
+    threshold = -0.5  # Default value
+    if len(sys.argv) > 3:
+        try:
+            threshold = float(sys.argv[3])
+        except ValueError:
+            print(f"Error: Could not convert '{sys.argv[3]}' to float")
+            print("Using default threshold value: -0.5")
     
     print(f"Starting with alerts {'enabled' if alerts_enabled else 'disabled'}, sensitivity {sensitivity}, threshold {threshold}")
     
