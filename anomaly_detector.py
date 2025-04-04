@@ -41,7 +41,7 @@ def extract_features(buffer):
     return features, feature_names
 
 class OneClassSVMDetector:
-    def __init__(self, model_path='models/model_svm.pkl', scaler_path='models/scaler.pkl', sensitivity=0.5, threshold=-1.0):
+    def __init__(self, model_path='models/model_svm.pkl', scaler_path='models/scaler.pkl', threshold=-0.5):
         try:
             model_data = joblib.load(model_path)
             if isinstance(model_data, dict):
@@ -55,11 +55,7 @@ class OneClassSVMDetector:
                 print("Loaded model directly")
             print(f"Model type: {type(self.model)}")
             
-            # Set sensitivity (0.0 to 1.0, higher = less sensitive)
-            self.sensitivity = max(0.0, min(1.0, sensitivity))
-            print(f"SVM sensitivity set to {self.sensitivity}")
-            
-            # Set threshold
+            # Set threshold directly
             self.threshold = threshold
             print(f"Anomaly threshold set to {self.threshold}")
         except Exception as e:
@@ -112,7 +108,7 @@ class OneClassSVMDetector:
                 # The decision_function returns signed distance to the separating hyperplane
                 # Negative values indicate anomalies, positive values indicate normal samples
                 
-                # Use the threshold from initialization
+                # Use the threshold directly
                 print(f"Threshold: {self.threshold}")
                 
                 # Return the raw score

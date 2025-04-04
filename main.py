@@ -5,7 +5,6 @@ import board
 import adafruit_mpu6050
 import traceback
 import numpy as np
-import argparse
 
 from datetime import datetime
 from lcd_alert import LCDAlert      
@@ -51,16 +50,18 @@ def check_anomaly(buffer, svm_detector, sensor_data):
 
 def main():
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Wind Turbine Monitoring System')
-    parser.add_argument('alerts_enabled', type=str, help='Enable alerts (true/false)')
-    parser.add_argument('sensitivity', type=float, help='SVM sensitivity (0.0 to 1.0)')
-    parser.add_argument('--threshold', type=float, default=-1.0, help='Anomaly detection threshold (default: -1.0)')
-    args = parser.parse_args()
+    if len(sys.argv) < 2:
+        print("Usage: python main.py <alerts_enabled> [sensitivity] [threshold]")
+        print("alerts_enabled: 'true' or 'false'")
+        print("sensitivity: float between 0.0 and 1.0 (default: 0.5)")
+        print("threshold: anomaly threshold (default: -0.5)")
+        return
+        
+    alerts_enabled = sys.argv[1].lower() == 'true'
+    sensitivity = float(sys.argv[2]) if len(sys.argv) > 2 else 0.5
+    threshold = float(sys.argv[3]) if len(sys.argv) > 3 else -0.5
     
-    # Convert alerts_enabled to boolean
-    alerts_enabled = args.alerts_enabled.lower() == 'true'
-    
-    print(f"Starting with alerts {'enabled' if alerts_enabled else 'disabled'}, sensitivity {args.sensitivity}, threshold {args.threshold}")
+    print(f"Starting with alerts {'enabled' if alerts_enabled else 'disabled'}, sensitivity {sensitivity}, threshold {threshold}")
     
     try:
         print("Starting initialization...")
@@ -88,24 +89,19 @@ def main():
         print("MPU6050 sensor initialized successfully")
         
         print("Initializing sensor buffer...")
-        sensor_buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
+        buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
         print("Sensor buffer initialized successfully")
         
         print("Loading anomaly detection model...")
-        svm_detector = anomaly_detector.OneClassSVMDetector(
-            model_path='models/model_svm.pkl',
-            sensitivity=args.sensitivity,
-            threshold=args.threshold
-        )
+        svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl', sensitivity=sensitivity, threshold=threshold)
         print("Anomaly detection model loaded successfully")
         
         print("Components Ready")
         print("\nMonitoring started at 5 Hz")
         print("Press Ctrl+C to stop")
         
-        # Main monitoring loop
         while True:
-            # Read sensor data
+            # Read sensor
             accel = sensor_device.acceleration
             gyro = sensor_device.gyro
             temp = sensor_device.temperature
@@ -119,46 +115,48 @@ def main():
                 'temp': temp
             }
             
-            # Add data to buffer
-            if sensor_buffer.add_reading(sensor_data, timestamp):
+            sensor.log_sensor_data_to_csv(sensor_data, timestamp.isoformat())
+            
+            # Update display
+            if lcd:
+                lcd.lcd.clear()
+                lcd.lcd.cursor_pos = (0, 0)
+                lcd.lcd.write_string(f"X:{accel_x:.1f} Y:{accel_y:.1f}")
+                lcd.lcd.cursor_pos = (1, 0)
+                lcd.lcd.write_string(f"Z:{accel_z:.1f}")
+            
+            # Check for anomalies
+            if buffer.add_reading(sensor_data, timestamp):
                 print("Window complete, checking for anomalies...")
-                
-                # Extract features
-                features, feature_names = anomaly_detector.extract_features(sensor_buffer)
-                
-                # Check for anomalies
+                features = anomaly_detector.extract_features(buffer)
                 if features is not None:
                     print("Features extracted, running anomaly detection...")
-                    anomaly_score = svm_detector.predict(features)
-                    is_anomaly = anomaly_score < args.threshold
+                    is_anomaly = check_anomaly(buffer, svm_detector, sensor_data)
+                    print(f"Anomaly detection result: {is_anomaly}")
                     
-                    # Format alert message
-                    alert = format_alert(anomaly_score, sensor_data)
-                    
-                    # Display on LCD
-                    if lcd:
-                        lcd.display_alert(alert)
-                    
-                    # Send SMS if anomaly detected and alerts are enabled
-                    if is_anomaly and alerts_enabled:
-                        sms_alert.send_sms_alert('+17782383531', alert)
+                    if is_anomaly:
                         print("ANOMALY DETECTED!")
-                    else:
-                        print("No anomaly detected")
+                        if lcd:
+                            lcd.display_alert("ANOMALY DETECTED!")
+                            print("LCD updated with anomaly alert")
+                        
+                        if alerts_enabled:
+                            alert_message = format_alert(sensor_data=sensor_data)
+                            sms_alert.send_sms_alert('+17782383531', alert_message)
+                            print("SMS alert sent")
             
-            # Wait before next reading
             time.sleep(0.2)  # 5 Hz
-            
     except KeyboardInterrupt:
-        print("\nMonitoring stopped by user")
+        print("\nStopping...")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"\nError: {e}")
         traceback.print_exc()
     finally:
-        # Clean up
-        if 'lcd' in locals() and lcd:
-            lcd.clear()
-        print("Monitoring system stopped")
+        if buffer:
+            buffer.process_remaining_data()
+        
+        print("\nMonitoring complete")
+        return 0
 
 if __name__ == "__main__":
     sys.exit(main())
