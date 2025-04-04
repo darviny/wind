@@ -101,7 +101,7 @@ def main():
         print("Sensor buffer initialized successfully")
         
         print("Loading anomaly detection model...")
-        svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl', sensitivity=sensitivity, threshold=threshold)
+        svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl', threshold=threshold)
         print("Anomaly detection model loaded successfully")
         
         print("Components Ready")
