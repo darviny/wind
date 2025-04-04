@@ -61,29 +61,40 @@ def main():
     alerts_enabled = args.alerts_enabled.lower() == 'true'
     
     # Initialize sensor
-    sensor = Sensor()
+    sensor_buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
     
     # Initialize anomaly detector with SVM
-    detector = OneClassSVMDetector(
+    detector = anomaly_detector.OneClassSVMDetector(
         model_path='models/model_svm.pkl',
         sensitivity=args.sensitivity,
         threshold=args.threshold
     )
     
     # Initialize LCD display
-    lcd = LCDDisplay()
+    lcd = LCDAlert()
     
     # Initialize SMS sender
-    sms = SMSSender()
+    sms = sms_alert.SMSAlert()
     
     # Main monitoring loop
     try:
         while True:
             # Read sensor data
-            sensor_data = sensor.read_data()
+            accel = sensor_device.acceleration
+            gyro = sensor_device.gyro
+            temp = sensor_device.temperature
+            timestamp = datetime.now()
+            accel_x, accel_y, accel_z = accel
+            gyro_x, gyro_y, gyro_z = gyro
+            
+            sensor_data = {
+                'accel_x': accel_x, 'accel_y': accel_y, 'accel_z': accel_z,
+                'gyro_x': gyro_x, 'gyro_y': gyro_y, 'gyro_z': gyro_z,
+                'temp': temp
+            }
             
             # Extract features
-            features, feature_names = extract_features(sensor)
+            features, feature_names = anomaly_detector.extract_features(sensor_buffer)
             
             # Check for anomalies
             if features is not None:
@@ -92,25 +103,26 @@ def main():
                 is_anomaly = anomaly_score < args.threshold
                 
                 # Format alert message
-                alert = format_alert(sensor_data=sensor_data)
+                alert = format_alert(anomaly_score, sensor_data)
                 
                 # Display on LCD
-                lcd.display(alert)
+                lcd.display_alert(alert)
                 
                 # Send SMS if anomaly detected and alerts are enabled
                 if is_anomaly and alerts_enabled:
-                    sms.send_alert(alert)
+                    sms.send_sms_alert('+17782383531', alert)
                     print("ANOMALY DETECTED!")
                 else:
                     print("No anomaly detected")
             
             # Wait before next reading
-            time.sleep(1)
+            time.sleep(0.2)  # 5 Hz
             
     except KeyboardInterrupt:
         print("\nMonitoring stopped by user")
     except Exception as e:
         print(f"Error: {e}")
+        traceback.print_exc()
     finally:
         # Clean up
         lcd.clear()
