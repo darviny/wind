@@ -102,21 +102,18 @@ class OneClassSVMDetector:
             # Try to use decision_function if available
             if hasattr(self.model, 'decision_function'):
                 score = self.model.decision_function(features)[0]
-                print(f"Raw SVM score: {score}")
+                print(f"SVM score: {score}")
                 
-                # Normalize the score to be between -1 and 1
+                # Use the raw score directly
                 # The decision_function returns signed distance to the separating hyperplane
                 # Negative values indicate anomalies, positive values indicate normal samples
-                normalized_score = score / np.abs(score) if score != 0 else 0
-                print(f"Normalized SVM score: {normalized_score}")
                 
-                # Adjust threshold based on sensitivity
-                # Higher sensitivity means we need a more negative score to detect anomaly
-                threshold = -self.sensitivity
+                # Simple threshold based on sensitivity
+                threshold = -0.1 - (self.sensitivity * 0.9)  # Range from -0.1 to -1.0
                 print(f"Threshold: {threshold}")
                 
-                # Return the normalized score shifted by the threshold
-                return float(normalized_score - threshold)
+                # Return the raw score
+                return float(score)
             else:
                 # If no decision_function, use predict and return -1 for anomalies
                 pred = self.model.predict(features)[0]

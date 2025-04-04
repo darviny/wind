@@ -64,8 +64,10 @@ def train_and_save_model(features, feature_names, model_path, scaler_path):
         scaler.fit(features_df)  # Fit on DataFrame to learn feature names
         scaled_features = scaler.transform(features_df)
         
-        # Train model
-        model = OneClassSVM(nu=0.1, kernel='rbf', gamma='scale')
+        # Train model with more robust parameters
+        # nu: controls the fraction of outliers (lower = more strict)
+        # gamma: controls the influence of each training example (lower = smoother decision boundary)
+        model = OneClassSVM(nu=0.05, kernel='rbf', gamma=0.1)
         model.fit(scaled_features)
         
         # Save model with feature names
