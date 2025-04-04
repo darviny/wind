@@ -39,7 +39,7 @@ def check_anomaly(buffer, svm_detector, sensor_data):
     print(f"SVM score: {svm_score}")
     
     # If SVM detects an anomaly
-    if np.any(svm_score < 0):  # Negative score indicates anomaly
+    if np.any(svm_score < svm_detector.threshold):  # Use the threshold from the detector
         print("SVM detected anomaly")
         print(format_alert(svm_score=svm_score, sensor_data=sensor_data))
         return True
