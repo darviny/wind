@@ -5,6 +5,7 @@ import board
 import adafruit_mpu6050
 import traceback
 import numpy as np
+import argparse
 
 from datetime import datetime
 from lcd_alert import LCDAlert      
@@ -50,111 +51,70 @@ def check_anomaly(buffer, svm_detector, sensor_data):
 
 def main():
     # Parse command line arguments
-    if len(sys.argv) < 2:
-        print("Usage: python main.py <alerts_enabled> [sensitivity]")
-        print("alerts_enabled: 'true' or 'false'")
-        print("sensitivity: float between 0.0 and 1.0 (default: 0.5)")
-        return
-        
-    alerts_enabled = sys.argv[1].lower() == 'true'
-    sensitivity = float(sys.argv[2]) if len(sys.argv) > 2 else 0.5
+    parser = argparse.ArgumentParser(description='Wind Turbine Monitoring System')
+    parser.add_argument('alerts_enabled', type=str, help='Enable alerts (true/false)')
+    parser.add_argument('sensitivity', type=float, help='SVM sensitivity (0.0 to 1.0)')
+    parser.add_argument('--threshold', type=float, default=-1.0, help='Anomaly detection threshold (default: -1.0)')
+    args = parser.parse_args()
     
-    print(f"Starting with alerts {'enabled' if alerts_enabled else 'disabled'}, sensitivity {sensitivity}")
+    # Convert alerts_enabled to boolean
+    alerts_enabled = args.alerts_enabled.lower() == 'true'
     
+    # Initialize sensor
+    sensor = Sensor()
+    
+    # Initialize anomaly detector with SVM
+    detector = OneClassSVMDetector(
+        model_path='models/model_svm.pkl',
+        sensitivity=args.sensitivity,
+        threshold=args.threshold
+    )
+    
+    # Initialize LCD display
+    lcd = LCDDisplay()
+    
+    # Initialize SMS sender
+    sms = SMSSender()
+    
+    # Main monitoring loop
     try:
-        print("Starting initialization...")
-        
-        # Initialize components
-        if alerts_enabled:
-            print("Initializing LCD...")
-            try:
-                lcd = LCDAlert()
-                print("LCD initialized successfully")
-                lcd.display_alert("Starting...")
-                print("LCD test message displayed")
-            except Exception as e:
-                print(f"Error initializing LCD: {e}")
-                lcd = None
-        else:
-            print("Alerts disabled, LCD not initialized")
-            
-        print("Initializing I2C...")
-        i2c = board.I2C()
-        print("I2C initialized successfully")
-        
-        print("Initializing MPU6050 sensor...")
-        sensor_device = adafruit_mpu6050.MPU6050(i2c)
-        print("MPU6050 sensor initialized successfully")
-        
-        print("Initializing sensor buffer...")
-        buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
-        print("Sensor buffer initialized successfully")
-        
-        print("Loading anomaly detection model...")
-        svm_detector = anomaly_detector.OneClassSVMDetector('models/model_svm.pkl', sensitivity=sensitivity)
-        print("Anomaly detection model loaded successfully")
-        
-        print("Components Ready")
-        print("\nMonitoring started at 5 Hz")
-        print("Press Ctrl+C to stop")
-        
         while True:
-            # Read sensor
-            accel = sensor_device.acceleration
-            gyro = sensor_device.gyro
-            temp = sensor_device.temperature
-            timestamp = datetime.now()
-            accel_x, accel_y, accel_z = accel
-            gyro_x, gyro_y, gyro_z = gyro
+            # Read sensor data
+            sensor_data = sensor.read_data()
             
-            sensor_data = {
-                'accel_x': accel_x, 'accel_y': accel_y, 'accel_z': accel_z,
-                'gyro_x': gyro_x, 'gyro_y': gyro_y, 'gyro_z': gyro_z,
-                'temp': temp
-            }
-            
-            sensor.log_sensor_data_to_csv(sensor_data, timestamp.isoformat())
-            
-            # Update display
-            if lcd:
-                lcd.lcd.clear()
-                lcd.lcd.cursor_pos = (0, 0)
-                lcd.lcd.write_string(f"X:{accel_x:.1f} Y:{accel_y:.1f}")
-                lcd.lcd.cursor_pos = (1, 0)
-                lcd.lcd.write_string(f"Z:{accel_z:.1f}")
+            # Extract features
+            features, feature_names = extract_features(sensor)
             
             # Check for anomalies
-            if buffer.add_reading(sensor_data, timestamp):
-                print("Window complete, checking for anomalies...")
-                features = anomaly_detector.extract_features(buffer)
-                if features is not None:
-                    print("Features extracted, running anomaly detection...")
-                    is_anomaly = check_anomaly(buffer, svm_detector, sensor_data)
-                    print(f"Anomaly detection result: {is_anomaly}")
-                    
-                    if is_anomaly:
-                        print("ANOMALY DETECTED!")
-                        if lcd:
-                            lcd.display_alert("ANOMALY DETECTED!")
-                            print("LCD updated with anomaly alert")
-                        
-                        if alerts_enabled:
-                            alert_message = format_alert(sensor_data=sensor_data)
-                            sms_alert.send_sms_alert('+17782383531', alert_message)
-                            print("SMS alert sent")
+            if features is not None:
+                print("Features extracted, running anomaly detection...")
+                anomaly_score = detector.predict(features)
+                is_anomaly = anomaly_score < args.threshold
+                
+                # Format alert message
+                alert = format_alert(sensor_data=sensor_data)
+                
+                # Display on LCD
+                lcd.display(alert)
+                
+                # Send SMS if anomaly detected and alerts are enabled
+                if is_anomaly and alerts_enabled:
+                    sms.send_alert(alert)
+                    print("ANOMALY DETECTED!")
+                else:
+                    print("No anomaly detected")
             
-            time.sleep(0.2)  # 5 Hz
+            # Wait before next reading
+            time.sleep(1)
+            
     except KeyboardInterrupt:
-        print("\nStopping...")
+        print("\nMonitoring stopped by user")
     except Exception as e:
-        print(f"\nError: {e}")
-        traceback.print_exc()
+        print(f"Error: {e}")
     finally:
-        if buffer:
-            buffer.process_remaining_data()
-        
-        print("\nMonitoring complete")
-        return 0
+        # Clean up
+        lcd.clear()
+        print("Monitoring system stopped")
 
 if __name__ == "__main__":
     sys.exit(main())
