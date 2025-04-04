@@ -60,24 +60,50 @@ def main():
     # Convert alerts_enabled to boolean
     alerts_enabled = args.alerts_enabled.lower() == 'true'
     
-    # Initialize sensor
-    sensor_buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
+    print(f"Starting with alerts {'enabled' if alerts_enabled else 'disabled'}, sensitivity {args.sensitivity}, threshold {args.threshold}")
     
-    # Initialize anomaly detector with SVM
-    detector = anomaly_detector.OneClassSVMDetector(
-        model_path='models/model_svm.pkl',
-        sensitivity=args.sensitivity,
-        threshold=args.threshold
-    )
-    
-    # Initialize LCD display
-    lcd = LCDAlert()
-    
-    # Initialize SMS sender
-    sms = sms_alert.SMSAlert()
-    
-    # Main monitoring loop
     try:
+        print("Starting initialization...")
+        
+        # Initialize components
+        if alerts_enabled:
+            print("Initializing LCD...")
+            try:
+                lcd = LCDAlert()
+                print("LCD initialized successfully")
+                lcd.display_alert("Starting...")
+                print("LCD test message displayed")
+            except Exception as e:
+                print(f"Error initializing LCD: {e}")
+                lcd = None
+        else:
+            print("Alerts disabled, LCD not initialized")
+            
+        print("Initializing I2C...")
+        i2c = board.I2C()
+        print("I2C initialized successfully")
+        
+        print("Initializing MPU6050 sensor...")
+        sensor_device = adafruit_mpu6050.MPU6050(i2c)
+        print("MPU6050 sensor initialized successfully")
+        
+        print("Initializing sensor buffer...")
+        sensor_buffer = sensor.SensorBuffer(window_size=1.0, expected_sample_rate=5)
+        print("Sensor buffer initialized successfully")
+        
+        print("Loading anomaly detection model...")
+        svm_detector = anomaly_detector.OneClassSVMDetector(
+            model_path='models/model_svm.pkl',
+            sensitivity=args.sensitivity,
+            threshold=args.threshold
+        )
+        print("Anomaly detection model loaded successfully")
+        
+        print("Components Ready")
+        print("\nMonitoring started at 5 Hz")
+        print("Press Ctrl+C to stop")
+        
+        # Main monitoring loop
         while True:
             # Read sensor data
             accel = sensor_device.acceleration
@@ -93,27 +119,32 @@ def main():
                 'temp': temp
             }
             
-            # Extract features
-            features, feature_names = anomaly_detector.extract_features(sensor_buffer)
-            
-            # Check for anomalies
-            if features is not None:
-                print("Features extracted, running anomaly detection...")
-                anomaly_score = detector.predict(features)
-                is_anomaly = anomaly_score < args.threshold
+            # Add data to buffer
+            if sensor_buffer.add_reading(sensor_data, timestamp):
+                print("Window complete, checking for anomalies...")
                 
-                # Format alert message
-                alert = format_alert(anomaly_score, sensor_data)
+                # Extract features
+                features, feature_names = anomaly_detector.extract_features(sensor_buffer)
                 
-                # Display on LCD
-                lcd.display_alert(alert)
-                
-                # Send SMS if anomaly detected and alerts are enabled
-                if is_anomaly and alerts_enabled:
-                    sms.send_sms_alert('+17782383531', alert)
-                    print("ANOMALY DETECTED!")
-                else:
-                    print("No anomaly detected")
+                # Check for anomalies
+                if features is not None:
+                    print("Features extracted, running anomaly detection...")
+                    anomaly_score = svm_detector.predict(features)
+                    is_anomaly = anomaly_score < args.threshold
+                    
+                    # Format alert message
+                    alert = format_alert(anomaly_score, sensor_data)
+                    
+                    # Display on LCD
+                    if lcd:
+                        lcd.display_alert(alert)
+                    
+                    # Send SMS if anomaly detected and alerts are enabled
+                    if is_anomaly and alerts_enabled:
+                        sms_alert.send_sms_alert('+17782383531', alert)
+                        print("ANOMALY DETECTED!")
+                    else:
+                        print("No anomaly detected")
             
             # Wait before next reading
             time.sleep(0.2)  # 5 Hz
@@ -125,7 +156,8 @@ def main():
         traceback.print_exc()
     finally:
         # Clean up
-        lcd.clear()
+        if 'lcd' in locals() and lcd:
+            lcd.clear()
         print("Monitoring system stopped")
 
 if __name__ == "__main__":
